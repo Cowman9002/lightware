@@ -1,0 +1,26 @@
+﻿---
+BasedOnStyle: LLVM
+ColumnLimit: 0
+AlignConsecutiveAssignments: 'true'
+AllowShortBlocksOnASingleLine: 'true'
+AllowShortCaseLabelsOnASingleLine: 'true'
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: 'true' 
+AlwaysBreakBeforeMultilineStrings: 'true'
+AlwaysBreakTemplateDeclarations: 'Yes'
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+Cpp11BracedListStyle: 'false'
+IndentCaseLabels: 'true'
+MaxEmptyLinesToKeep: '2'
+NamespaceIndentation: All
+PointerAlignment: Right
+SortIncludes: 'false'
+SortUsingDeclarations: 'false'
+SpaceBeforeInheritanceColon: 'true'
+SpaceBeforeRangeBasedForLoopColon: 'true'
+SpaceInEmptyParentheses: 'false'
+TabWidth: '4'
+IndentWidth: '4'
+
+...

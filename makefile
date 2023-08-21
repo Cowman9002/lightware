@@ -1,4 +1,4 @@
-TARGET := fuckyou
+TARGET := lightware
 LIBS := -lm -lgdi32 -lzdll -lSDL2main -lSDL2.dll
 CC := gcc
 CFLAGS := -Iinclude -Llib -Wall -MD -MP -g
@@ -8,7 +8,7 @@ CFLAGS := -Iinclude -Llib -Wall -MD -MP -g
 default: $(TARGET)
 all: default
 
-SOURCES = src/main.c src/lodepng.c
+SOURCES = src/main.c src/lodepng.c src/draw.c src/color.c
 OBJECTS = $(patsubst %.c, obj/%.o, $(SOURCES))
 HEADERS = $(wildcard *.h)
 

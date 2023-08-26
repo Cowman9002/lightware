@@ -1,12 +1,23 @@
 #include "draw.h"
 
+#include <malloc.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
-extern uint32_t *g_pixels;
+Color *g_pixels = NULL;
 
-void drawPoint(int x, int y, Color color) {
-    if (x < 0 || y < 0 || x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT) return;
-    g_pixels[x + y * SCREEN_WIDTH] = *(uint32_t*)&color;
+Color **getPixelBufferPtr() {
+    return &g_pixels;
+}
+
+void setPixel(unsigned x, unsigned y, Color color) {
+    if (x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT) return;
+    g_pixels[x + y * SCREEN_WIDTH] = color;
+}
+
+void setPixelI(unsigned i, Color color) {
+    g_pixels[i] = color;
 }
 
 // https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
@@ -27,6 +38,10 @@ void drawLine(int x0, int y0, int x1, int y1, Color color) {
     }
 }
 
+//
+//      INTERNAL
+//
+
 void _plotLineHigh(int x0, int y0, int x1, int y1, Color color) {
     int dx = x1 - x0;
     int dy = y1 - y0;
@@ -39,7 +54,7 @@ void _plotLineHigh(int x0, int y0, int x1, int y1, Color color) {
     int x = x0;
 
     for (int y = y0; y <= y1; ++y) {
-        drawPoint(x, y, color);
+        setPixel(x, y, color);
         if (D > 0) {
             x = x + xi;
             D = D + (2 * (dx - dy));
@@ -62,7 +77,7 @@ void _plotLineLow(int x0, int y0, int x1, int y1, Color color) {
     int y = y0;
 
     for (int x = x0; x <= x1; ++x) {
-        drawPoint(x, y, color);
+        setPixel(x, y, color);
         if (D > 0) {
             y = y + yi;
             D = D + (2 * (dy - dx));

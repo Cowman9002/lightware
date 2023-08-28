@@ -3,7 +3,7 @@
 #include "util.h"
 #include "color.h"
 
-#define RESOLUTION_DIVISOR 4
+#define RESOLUTION_DIVISOR 2
 #define SCREEN_WIDTH (640 / RESOLUTION_DIVISOR)
 #define SCREEN_HEIGHT (480 / RESOLUTION_DIVISOR)
 #define PIXEL_SIZE (2 * RESOLUTION_DIVISOR)

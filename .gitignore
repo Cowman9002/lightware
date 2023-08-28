@@ -2,3 +2,4 @@
 *.stackdump
 obj/
 .vscode/
+drmem_logs/

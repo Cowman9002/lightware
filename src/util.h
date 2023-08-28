@@ -5,6 +5,8 @@
 #define clamp(a, b, c) ((a) < (b) ? (b) : (a) > (c) ? (c) : (a))
 #define lerp(a, b, t) ((a) * (1.0 - (t)) + (b) * (t))
 
+#define swap(T, x, y) do { T tmp = x; x = y; y = tmp; } while (0)
+
 typedef float vec2[2];
 typedef int vec2i[2];
 typedef float vec3[3];
@@ -13,6 +15,7 @@ typedef float mat3[3 * 2]; // bottom layer is always 0, 0, 1
 #define VEC2(x, y) ((vec2){(x), (y)})
 #define VEC3(x, y) ((vec2){(x), (y)})
 
+float dot2d(vec2 a, vec2 b);
 float cross2d(vec2 a, vec2 b);
 
 void mat3Translate(vec2 t, mat3 out);

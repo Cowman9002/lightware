@@ -2,6 +2,10 @@
 
 #include "math.h"
 
+float dot2d(vec2 a, vec2 b) {
+    return a[0] * b[0] + a[1] * b[1];
+}
+
 float cross2d(vec2 a, vec2 b) {
     return a[0] * b[1] - a[1] * b[0];
 }

@@ -1,7 +1,9 @@
 TARGET := lightware
 LIBS := -lm -lgdi32 -lzdll -lSDL2main -lSDL2.dll
-CC := gcc
-CFLAGS := -Iinclude -Llib -Wall -MD -MP -g
+# CC := gcc
+CC := x86_64-w64-mingw32-gcc
+# CFLAGS := -Iinclude -Llib -Wall -MD -MP -g -DMEMDEBUG
+CFLAGS := -static-libgcc -Iinclude -Llib -Wall -MD -MP -ggdb
 
 .PHONY: default all clean
 

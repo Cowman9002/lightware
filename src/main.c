@@ -14,6 +14,8 @@
 #include <stdbool.h>
 #include <assert.h>
 
+// TODO: Fix aspect ratio :')
+
 #ifdef MEMDEBUG
 void *d_malloc(size_t s) {
     void *res = malloc(s);
@@ -74,6 +76,11 @@ typedef struct WallDraw {
     vec2 uv_coords[2];
 } WallDraw;
 
+const int8_t *g_keys;
+int8_t *g_last_keys;
+float g_delta;
+
+uint16_t *g_depth_buffer;
 
 int main(int argc, char *argv[]) {
 
@@ -98,10 +105,14 @@ int main(int argc, char *argv[]) {
     uint16_t *const depth_buffer = (uint16_t *)malloc(SCREEN_HEIGHT * SCREEN_WIDTH * sizeof(*depth_buffer));
     if (depth_buffer == NULL) return -2;
     bool render_depth = false;
+    g_depth_buffer    = depth_buffer;
 
     const int8_t *keys      = (const int8_t *)SDL_GetKeyboardState(NULL);
     int8_t *const last_keys = (int8_t *)malloc(SDL_NUM_SCANCODES * sizeof(*last_keys));
     if (last_keys == NULL) return -2;
+
+    g_keys      = keys;
+    g_last_keys = last_keys;
 
     int pitch;
     unsigned int frame = 0;
@@ -127,24 +138,46 @@ int main(int argc, char *argv[]) {
     cam.sector = -1;
     cam.pos[0] = 0.0f;
     cam.pos[1] = 4.0f;
-    cam.pos[2] = 0.5f;
+    cam.pos[2] = 1.5f;
     cam.rot    = 0.0f;
 
     mat3 view_mat;
 
     PortalWorld pod = {
         .sectors = (SectorDef[]){
-            (SectorDef){ 0, 4, 1.0f, 0.0f },
+            (SectorDef){ 0, 4, 3.5f, 0.0f },
+            (SectorDef){ 4, 6, 6.0f, 0.2f },
         },
-        .num_sectors = 1,
+        .num_sectors = 2,
         .wall_lines  = (Line[]){
+            // sector 1
             { { { -5.0f, -5.0f }, { 5.0f, -5.0f } } },
-            { { { 5.0f, -5.0f }, { 5.0f, 5.0f } } },
-            { { { 5.0f, 5.0f }, { -5.0f, 5.0f } } },
-            { { { -5.0f, 5.0f }, { -5.0f, -5.0f } } },
+            { { { 5.0f, -5.0f }, { 5.0f, 50.0f } } },
+            { { { 5.0f, 50.0f }, { -5.0f, 50.0f } } },
+            { { { -5.0f, 50.0f }, { -5.0f, -5.0f } } },
+            // sector 2
+            { { { 5.0f, -5.0f }, { -5.0f, -5.0f } } },
+            { { { -5.0f, -5.0f }, { -10.0f, -12.0f } } },
+            { { { -10.0f, -12.0f }, { -10.0f, -20.0f } } },
+            { { { -10.0f, -20.0f }, { 20.0f, -25.0f } } },
+            { { { 20.0f, -25.0f }, { 20.0f, -12.0f } } },
+            { { { 20.0f, -12.0f }, { 5.0f, -5.0f } } },
         },
-        .wall_nexts = (unsigned[]){ INVALID_SECTOR_INDEX, INVALID_SECTOR_INDEX, INVALID_SECTOR_INDEX, INVALID_SECTOR_INDEX },
-        .num_walls  = 4,
+        .wall_nexts = (unsigned[]){
+            // sector 1
+            1,
+            INVALID_SECTOR_INDEX,
+            INVALID_SECTOR_INDEX,
+            INVALID_SECTOR_INDEX,
+            // sector 2
+            0,
+            INVALID_SECTOR_INDEX,
+            INVALID_SECTOR_INDEX,
+            INVALID_SECTOR_INDEX,
+            INVALID_SECTOR_INDEX,
+            INVALID_SECTOR_INDEX,
+        },
+        .num_walls = 11,
     };
 
     /////////////////////////////////////////////////////////////
@@ -156,6 +189,8 @@ int main(int argc, char *argv[]) {
         ticks      = SDL_GetTicks64();
         delta      = (float)(ticks - last_ticks) / 1000.0f;
         last_ticks = ticks;
+
+        g_delta = delta;
 
         if (ticks >= next_fps_print) {
             next_fps_print += 1000;
@@ -179,27 +214,76 @@ int main(int argc, char *argv[]) {
 
             float input_h = keys[SDL_SCANCODE_D] - keys[SDL_SCANCODE_A];
             float input_v = keys[SDL_SCANCODE_S] - keys[SDL_SCANCODE_W];
-            float input_z = keys[SDL_SCANCODE_Q] - keys[SDL_SCANCODE_Z];
+            // float input_z = keys[SDL_SCANCODE_Q] - keys[SDL_SCANCODE_Z];
             float input_r = keys[SDL_SCANCODE_RIGHT] - keys[SDL_SCANCODE_LEFT];
 
             cam.rot += input_r * delta * 2.0f;
             cam.rot_cos = cosf(cam.rot);
             cam.rot_sin = sinf(cam.rot);
 
-            vec2 movement = { input_h * delta * 10.0f, input_v * delta * 10.0f };
+            vec2 movement = { cam.rot_cos * input_h + -cam.rot_sin * input_v, cam.rot_sin * input_h + cam.rot_cos * input_v };
 
-            cam.pos[0] += cam.rot_cos * movement[0] + -cam.rot_sin * movement[1];
-            cam.pos[1] += cam.rot_sin * movement[0] + cam.rot_cos * movement[1];
-            // cam.pos[2] += input_z * delta * 5.0f;
+            vec2 new_pos = {
+                cam.pos[0] + movement[0] * delta * 10.0f,
+                cam.pos[1] + movement[1] * delta * 10.0f,
+            };
+
+            // player collision
+            if (cam.sector < pod.num_sectors) {
+                SectorDef sector = pod.sectors[cam.sector];
+                float t;
+
+                for (unsigned i = 0; i < sector.length; ++i) {
+                    Line wall_line     = pod.wall_lines[sector.start + i];
+                    unsigned wall_next = pod.wall_nexts[sector.start + i];
+                    if (wall_next < pod.num_sectors) continue; // TODO: step height
+
+                    vec2 wall_norm;
+                    {
+                        vec2 d    = { wall_line.points[1][0] - wall_line.points[0][0], wall_line.points[1][1] - wall_line.points[0][1] };
+                        float len = dot2d(d, d);
+                        if (len != 0) {
+                            len = sqrtf(len);
+                            d[0] /= len;
+                            d[1] /= len;
+                            wall_norm[0] = -d[1];
+                            wall_norm[1] = d[0];
+                        }
+                    }
+
+                    Line movement_line = {
+                        .points = {
+                            { cam.pos[0], cam.pos[1] },
+                            { new_pos[0] - wall_norm[0], new_pos[1] - wall_norm[1] },
+                        },
+                    };
+
+                    if (intersectSegmentSegment(movement_line.points, wall_line.points, &t)) {
+                        vec2 intersect_point = {
+                            lerp(movement_line.points[0][0], movement_line.points[1][0], t),
+                            lerp(movement_line.points[0][1], movement_line.points[1][1], t),
+                        };
+                        new_pos[0] = intersect_point[0] + wall_norm[0];
+                        new_pos[1] = intersect_point[1] + wall_norm[1];
+                    }
+                }
+            }
+
+            cam.pos[0] = new_pos[0];
+            cam.pos[1] = new_pos[1];
 
             // printf("%f, %f\n", cam.pos[0], cam.pos[1]);
 
             cam.sector = getCurrentSector(pod, cam.pos, cam.sector);
 
-            if (cam.sector != INVALID_SECTOR_INDEX) {
-                cam.pos[2] = pod.sectors[cam.sector].floor_height + 0.5f;
+            if (cam.sector < pod.num_sectors) {
+                cam.pos[2] = pod.sectors[cam.sector].floor_height + 1.65f;
 
-                pod.sectors[cam.sector].ceiling_height += input_z * delta;
+                float input_ceil  = keys[SDL_SCANCODE_R] - keys[SDL_SCANCODE_E];
+                float input_floor = keys[SDL_SCANCODE_Y] - keys[SDL_SCANCODE_T];
+
+                pod.sectors[cam.sector].ceiling_height += input_ceil * delta;
+                pod.sectors[cam.sector].floor_height += input_floor * delta;
             }
         }
 
@@ -236,10 +320,11 @@ int main(int argc, char *argv[]) {
 
                 for (unsigned k = 0; k < sector.length; ++k) {
                     vec2 wall_points[2];
-                    wall_points[0][0] = pod.wall_lines[sector.start + k].points[0][0];
-                    wall_points[0][1] = pod.wall_lines[sector.start + k].points[0][1];
-                    wall_points[1][0] = pod.wall_lines[sector.start + k].points[1][0];
-                    wall_points[1][1] = pod.wall_lines[sector.start + k].points[1][1];
+                    wall_points[0][0]  = pod.wall_lines[sector.start + k].points[0][0];
+                    wall_points[0][1]  = pod.wall_lines[sector.start + k].points[0][1];
+                    wall_points[1][0]  = pod.wall_lines[sector.start + k].points[1][0];
+                    wall_points[1][1]  = pod.wall_lines[sector.start + k].points[1][1];
+                    unsigned wall_next = pod.wall_nexts[sector.start + k];
 
                     vec2 world_space[2];
                     vec2 view_tspace[2];
@@ -271,9 +356,9 @@ int main(int argc, char *argv[]) {
                         screen_pos[j][1] = view_space[j][1] + SCREEN_HEIGHT * 0.5f;
                     }
 
-                    drawLine(screen_pos[0][0], screen_pos[0][1], screen_pos[1][0], screen_pos[1][1], COLOR_WHITE);
-                    setPixel(screen_pos[0][0], screen_pos[0][1], COLOR_GREEN);
-                    setPixel(screen_pos[1][0], screen_pos[1][1], COLOR_GREEN);
+                    drawLine(screen_pos[0][0], screen_pos[0][1], screen_pos[1][0], screen_pos[1][1], wall_next < pod.num_sectors ? COLOR_PURPLE : COLOR_WHITE);
+                    setPixel(screen_pos[0][0], screen_pos[0][1], COLOR_BLACK);
+                    setPixel(screen_pos[1][0], screen_pos[1][1], COLOR_BLACK);
                 }
             }
 
@@ -287,9 +372,14 @@ int main(int argc, char *argv[]) {
             setPixel(screen_cam_pos[0], screen_cam_pos[1], COLOR_RED);
         }
 
-        {
+        if (cam.sector < pod.num_sectors) {
             snprintf(print_buffer, sizeof(print_buffer), "SECTOR: %i", cam.sector);
             renderText(print_buffer, 0, 0, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
+
+            snprintf(print_buffer, sizeof(print_buffer), "CEIL: %f", pod.sectors[cam.sector].ceiling_height);
+            renderText(print_buffer, 0, 24, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
+            snprintf(print_buffer, sizeof(print_buffer), "FLOOR: %f", pod.sectors[cam.sector].floor_height);
+            renderText(print_buffer, 0, 24 * 2, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
         }
 
         SDL_UnlockTexture(screen_texture);

@@ -10,6 +10,17 @@ float cross2d(vec2 a, vec2 b) {
     return a[0] * b[1] - a[1] * b[0];
 }
 
+float dot3d(vec3 a, vec3 b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+float dist3d(vec3 a, vec3 b) {
+    vec3 diff = {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+    float sqr_dist = dot3d(diff, diff);
+    return sqrtf(sqr_dist);
+}
+
+
 void mat3Translate(vec2 t, mat3 out) {
     out[0 + 0 * 3] = 1.0f; out[1 + 0 * 3] = 0.0f; out[2 + 0 * 3] = t[0];
     out[0 + 1 * 3] = 0.0f; out[1 + 1 * 3] = 1.0f; out[2 + 1 * 3] = t[1];

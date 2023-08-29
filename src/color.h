@@ -8,6 +8,7 @@ typedef struct Color {
 
 #define RGBA(r, g, b, a) ((Color){(a), (b), (g), (r)})
 #define RGB(r, g, b) RGBA(r, g, b, 255)
+#define RGBV(v) RGB(v, v, v)
 
 #define COLOR_WHITE ((Color){ .r = 255, .g = 255, .b = 255, .a = 255 })
 #define COLOR_BLACK ((Color){ .r = 0, .g = 0, .b = 0, .a = 255 })

@@ -10,7 +10,7 @@ CFLAGS := -static-libgcc -Iinclude -Llib -Wall -MD -MP -ggdb
 default: $(TARGET)
 all: default
 
-SOURCES = src/main.c src/lodepng.c src/util.c src/draw.c src/color.c
+SOURCES = src/main.c src/lodepng.c src/util.c src/draw.c src/color.c src/geo.c src/portals.c
 OBJECTS = $(patsubst %.c, obj/%.o, $(SOURCES))
 HEADERS = $(wildcard *.h)
 

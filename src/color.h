@@ -20,3 +20,4 @@ typedef struct Color {
 #define COLOR_PURPLE ((Color){ .r = 255, .g = 0, .b = 255, .a = 255 })
 
 Color mixColor(Color c0, Color c1);
+Color mulColor(Color c0, uint8_t m);

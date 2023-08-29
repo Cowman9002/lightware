@@ -31,6 +31,37 @@ bool pointInPoly(Line *lines, unsigned num_lines, vec2 point) {
     return num_intersections % 2 == 1;
 }
 
+bool intersectSegmentSegment(vec2 line0[2], vec2 line1[2], float *o_t) {
+    float x1, x2, x3, x4;
+    float y1, y2, y3, y4;
+    x1 = line0[0][0];
+    y1 = line0[0][1];
+    x2 = line0[1][0];
+    y2 = line0[1][1];
+    x3 = line1[0][0];
+    y3 = line1[0][1];
+    x4 = line1[1][0];
+    y4 = line1[1][1];
+
+    float denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (denom == 0) return false;
+
+    float tn = (x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4);
+    float un = (x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2);
+
+    float t = tn / denom;
+    float u = un / denom;
+
+    // t is segment, u is ray.
+    if (t < 0.0f || t > 1.0f || u < 0.0f || u > 1.0f) return false;
+
+    if (o_t != NULL) {
+        // TODO Remove division when o_t is not needed
+        *o_t = t;
+    }
+
+    return true;
+}
 
 bool intersectSegmentLine(vec2 line0[2], vec2 line1[2], float *o_t) {
     float x1, x2, x3, x4;

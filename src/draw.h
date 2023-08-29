@@ -18,6 +18,8 @@
 #define FAR_PLANE 100.0f
 #define NEAR_PLANE 0.3f
 
+#define FLOAT_TO_DEPTH(z) ((z / FAR_PLANE) * (uint16_t)(~0))
+
 Color **getPixelBufferPtr();
 
 void setPixel(unsigned x, unsigned y, Color color);

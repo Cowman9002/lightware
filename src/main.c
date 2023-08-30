@@ -137,8 +137,8 @@ int main(int argc, char *argv[]) {
     Camera cam;
     cam.sector = -1;
     cam.pos[0] = 0.0f;
-    cam.pos[1] = 4.0f;
-    cam.pos[2] = 1.5f;
+    cam.pos[1] = -4.0f;
+    cam.pos[2] = 0.0f;
     cam.rot    = 0.0f;
 
     mat3 view_mat;
@@ -278,6 +278,7 @@ int main(int argc, char *argv[]) {
 
             if (cam.sector < pod.num_sectors) {
                 cam.pos[2] = pod.sectors[cam.sector].floor_height + 1.65f;
+                // cam.pos[2] = pod.sectors[cam.sector].floor_height + 0.5f;
 
                 float input_ceil  = keys[SDL_SCANCODE_R] - keys[SDL_SCANCODE_E];
                 float input_floor = keys[SDL_SCANCODE_Y] - keys[SDL_SCANCODE_T];

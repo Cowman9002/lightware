@@ -101,7 +101,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                 for (int x = 0; x < SCREEN_WIDTH; ++x) {
                     if (y < occlusion_top[x] || y >= occlusion_bottom[x]) continue;
-                    float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * 2.0f;
+
+                    float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO;
 
                     float rx = cam.rot_cos * wx + -cam.rot_sin * wy;
                     float ry = cam.rot_sin * wx + cam.rot_cos * wy;
@@ -125,7 +126,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                     int checker = (int)(floorf(px) + floorf(py)) % 2;
                     Color color = checker ? COLOR_RED : RGB(128, 0, 0);
-                    color       = mulColor(color, lighting * 255);
+                    // color       = mulColor(color, lighting * 255);
                     setPixel(x, y, color);
                 }
             }
@@ -142,7 +143,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                 for (int x = 0; x < SCREEN_WIDTH; ++x) {
                     if (pixel_y < occlusion_top[x] || pixel_y >= occlusion_bottom[x]) continue;
 
-                    float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * 2.0f;
+                    float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO;
 
                     float rx = cam.rot_cos * wx + -cam.rot_sin * wy;
                     float ry = cam.rot_sin * wx + cam.rot_cos * wy;
@@ -166,7 +167,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                     int checker = (int)(floorf(px) + floorf(py)) % 2;
                     Color color = checker ? COLOR_GREEN : RGB(0, 128, 0);
-                    color       = mulColor(color, lighting * 255);
+                    // color       = mulColor(color, lighting * 255);
                     setPixel(x, pixel_y, color);
                 }
             }
@@ -226,8 +227,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             // Clip
             {
                 vec2 clip_planes[4][2] = {
-                    { { 0.0f, 0.0f }, { -1.0f, 1.0f } },
-                    { { 1.0f, 1.0f }, { 0.0f, 0.0f } },
+                    { { 0.0f, 0.0f }, { -ASPECT_RATIO * 0.5f, 1.0f } },
+                    { { ASPECT_RATIO * 0.5f, 1.0f }, { 0.0f, 0.0f } },
                     { { 1.0f, -NEAR_PLANE }, { -1.0f, -NEAR_PLANE } },
                     { { -1.0f, -FAR_PLANE }, { 1.0f, -FAR_PLANE } },
                 };
@@ -248,7 +249,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             {
                 for (unsigned pi = 0; pi < 2; ++pi) {
                     ndc_space.points[pi][1] = -1.0f / view_space.points[pi][1];
-                    ndc_space.points[pi][0] = view_space.points[pi][0] * ndc_space.points[pi][1];
+                    ndc_space.points[pi][0] = view_space.points[pi][0] * ndc_space.points[pi][1] * 2.0f * INV_ASPECT_RATIO;
 
                     // perpective correct mapping
                     attr[pi].uv[0] *= ndc_space.points[pi][1];
@@ -345,7 +346,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                         int checker = (int)(floorf(u) + floorf(v)) % 2;
                         Color color = checker ? COLOR_BLUE : RGB(0, 0, 128);
-                        color       = mulColor(color, lighting * 255);
+                        // color       = mulColor(color, lighting * 255);
                         setPixel(x, y, color);
                     }
                 }
@@ -390,8 +391,9 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                     start_y  = clamp(start_y, occlusion_top[x], occlusion_bottom[x]);
                     end_y    = clamp(end_y, occlusion_top[x], occlusion_bottom[x]);
-                    start_ny = clamp(start_ny, occlusion_top[x], occlusion_bottom[x]);
-                    end_ny   = clamp(end_ny, occlusion_top[x], occlusion_bottom[x]);
+
+                    start_ny = min(clamp(start_ny, occlusion_top[x], occlusion_bottom[x]), end_y);
+                    end_ny   = max(clamp(end_ny, occlusion_top[x], occlusion_bottom[x]), start_y);
 
                     occlusion_top[x]    = max(occlusion_top[x], max(start_y, start_ny));
                     occlusion_bottom[x] = min(occlusion_bottom[x], min(end_y, end_ny));
@@ -423,7 +425,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                         int checker = (int)(floorf(u) + floorf(v)) % 2;
                         Color color = checker ? RGB(200, 0, 255) : RGB(100, 0, 128);
-                        color       = mulColor(color, lighting * 255);
+                        // color       = mulColor(color, lighting * 255);
                         setPixel(x, y, color);
                     }
 
@@ -453,7 +455,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                         int checker = (int)(floorf(u) + floorf(v)) % 2;
                         Color color = checker ? RGB(0, 200, 255) : RGB(0, 100, 128);
-                        color       = mulColor(color, lighting * 255);
+                        // color       = mulColor(color, lighting * 255);
                         setPixel(x, y, color);
                     }
                 }

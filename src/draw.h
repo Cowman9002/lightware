@@ -2,6 +2,7 @@
 
 #include "util.h"
 #include "color.h"
+#include <stdbool.h>
 
 #define RESOLUTION_DIVISOR 2
 #define SCREEN_WIDTH (640 / RESOLUTION_DIVISOR)
@@ -19,6 +20,14 @@
 #define NEAR_PLANE 0.3f
 
 #define FLOAT_TO_DEPTH(z) ((z / FAR_PLANE) * (uint16_t)(~0))
+
+typedef struct Image {
+    Color *data;
+    int width, height;
+} Image;
+
+bool readPng(const char *path, Image *out);
+Color sampleImage(Image image, unsigned x, unsigned y);
 
 Color **getPixelBufferPtr();
 

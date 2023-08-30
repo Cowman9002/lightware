@@ -41,15 +41,6 @@ void d_free(void *mem) {
 #define free(m) d_free(m)
 #endif
 
-typedef struct Image {
-    Color *data;
-    int width, height;
-} Image;
-
-bool solveClipping(vec2 plane0, vec2 plane1, vec2 p0, vec2 p1, float *o_t, int *o_clip_index);
-
-bool readPng(const char *path, Image *out);
-Color sampleImage(Image image, unsigned x, unsigned y);
 
 void renderText(const char *text, int draw_x, int draw_y, Color draw_color, Image font, unsigned char_width) {
     int x_offset = 0;
@@ -78,11 +69,9 @@ typedef struct WallDraw {
     vec2 uv_coords[2];
 } WallDraw;
 
-const int8_t *g_keys;
-int8_t *g_last_keys;
-float g_delta;
-
 uint16_t *g_depth_buffer;
+
+Image g_image_array[3];
 
 int main(int argc, char *argv[]) {
 
@@ -112,9 +101,6 @@ int main(int argc, char *argv[]) {
     int8_t *const last_keys = (int8_t *)malloc(SDL_NUM_SCANCODES * sizeof(*last_keys));
     if (last_keys == NULL) return -2;
 
-    g_keys      = keys;
-    g_last_keys = last_keys;
-
     int pitch;
     unsigned int frame = 0;
 
@@ -136,6 +122,10 @@ int main(int argc, char *argv[]) {
     Image main_font;
     const unsigned MAIN_FONT_CHAR_WIDTH = 16;
     if (!readPng("res/fonts/vhs.png", &main_font)) return -1;
+
+    if(!readPng("res/textures/wall.png", &g_image_array[0])) return -1;
+    if(!readPng("res/textures/floor.png", &g_image_array[1])) return -1;
+    if(!readPng("res/textures/ceiling.png", &g_image_array[2])) return -1;
 
     char print_buffer[128];
 
@@ -196,8 +186,6 @@ int main(int argc, char *argv[]) {
         ticks      = SDL_GetTicks64();
         delta      = (float)(ticks - last_ticks) / 1000.0f;
         last_ticks = ticks;
-
-        g_delta = delta;
 
         if (ticks >= next_fps_print) {
             next_fps_print += 1000;

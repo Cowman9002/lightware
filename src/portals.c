@@ -4,6 +4,7 @@
 
 #include <SDL2/SDL.h>
 
+#include <math.h>
 #include <stdio.h>
 
 typedef struct WallAttribute {
@@ -52,11 +53,14 @@ unsigned getCurrentSector(PortalWorld pod, vec2 point, unsigned last_sector) {
 
 extern uint16_t *g_depth_buffer;
 
-#define FLASHLIGHT_CUTOFF 0.9f
-#define FLASHLIGHT_OUTER_CUTOFF 0.8f
+#define FLASHLIGHT_CUTOFF 0.98f
+#define FLASHLIGHT_OUTER_CUTOFF 0.9f
+#define AMBIENT 0.05f
 static float s_flashlight_power;
 
-bool pixelProgram(WallAttribute attr, Camera cam, Color color, Color *o_color) {
+extern Image g_image_array[3];
+
+bool pixelProgram(WallAttribute attr, Camera cam, unsigned texid, Color *o_color) {
     vec3 to_cam       = { cam.pos[0] - attr.world_pos[0], cam.pos[1] - attr.world_pos[1], cam.pos[2] - attr.world_pos[2] };
     float to_cam_dist = sqrtf(dot3d(to_cam, to_cam));
 
@@ -70,11 +74,25 @@ bool pixelProgram(WallAttribute attr, Camera cam, Color color, Color *o_color) {
     float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
     float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
 
-    float lighting = spot_intensity * attenuation * ndotl;
+    float lighting = clamp(AMBIENT + spot_intensity * attenuation * ndotl, 0.0f, 1.0f);
 
-    int checker = (int)(floorf(attr.uv[0]) + floorf(attr.uv[1])) % 2;
-    *o_color    = checker ? color : mulColor(color, 128);
-    *o_color    = mulColor(*o_color, lighting * 255);
+    // int checker = (int)(floorf(attr.uv[0]) + floorf(attr.uv[1])) % 2;
+    // *o_color    = checker ? color : mulColor(color, 128);
+    if (texid >= 3) texid = 0;
+
+    {
+        Image img      = g_image_array[texid];
+        float u = modff(attr.uv[0], NULL);
+        float v = modff(attr.uv[1], NULL);
+        if(u < 0) u += 1;
+        if(v < 0) v += 1;
+
+        unsigned tex_x = (u * (g_image_array->width - 1));
+        unsigned tex_y = (v * (g_image_array->height - 1));
+        *o_color       = sampleImage(img, tex_x, tex_y);
+    }
+
+    *o_color = mulColor(*o_color, lighting * 255);
     return true;
 }
 
@@ -156,7 +174,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     };
                     Color color;
 
-                    if (pixelProgram(attr, cam, COLOR_YELLOW, &color)) {
+                    if (pixelProgram(attr, cam, 2, &color)) {
                         setPixel(x, y, color);
                     }
                 }
@@ -191,7 +209,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     };
                     Color color;
 
-                    if (pixelProgram(attr, cam, COLOR_CYAN, &color)) {
+                    if (pixelProgram(attr, cam, 1, &color)) {
                         setPixel(x, pixel_y, color);
                     }
                 }
@@ -357,12 +375,12 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                         WallAttribute attr = {
                             .uv        = { u, v },
-                            .world_pos = {world_pos[0], world_pos[1], world_pos[2]},
-                            .normal    = {wall_norm[0], wall_norm[1], 0.0f},
+                            .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
+                            .normal    = { wall_norm[0], wall_norm[1], 0.0f },
                         };
                         Color color;
 
-                        if (pixelProgram(attr, cam, COLOR_RED, &color)) {
+                        if (pixelProgram(attr, cam, 0, &color)) {
                             setPixel(x, y, color);
                         }
                     }
@@ -426,12 +444,12 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                         WallAttribute attr = {
                             .uv        = { u, v },
-                            .world_pos = {world_pos[0], world_pos[1], world_pos[2]},
-                            .normal    = {wall_norm[0], wall_norm[1], 0.0f},
+                            .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
+                            .normal    = { wall_norm[0], wall_norm[1], 0.0f },
                         };
                         Color color;
 
-                        if (pixelProgram(attr, cam, COLOR_GREEN, &color)) {
+                        if (pixelProgram(attr, cam, 0, &color)) {
                             setPixel(x, y, color);
                         }
                     }
@@ -448,12 +466,12 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                         WallAttribute attr = {
                             .uv        = { u, v },
-                            .world_pos = {world_pos[0], world_pos[1], world_pos[2]},
-                            .normal    = {wall_norm[0], wall_norm[1], 0.0f},
+                            .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
+                            .normal    = { wall_norm[0], wall_norm[1], 0.0f },
                         };
                         Color color;
 
-                        if (pixelProgram(attr, cam, COLOR_BLUE, &color)) {
+                        if (pixelProgram(attr, cam, 0, &color)) {
                             setPixel(x, y, color);
                         }
                     }

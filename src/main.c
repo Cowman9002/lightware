@@ -14,6 +14,10 @@
 #include <stdbool.h>
 #include <assert.h>
 
+// TODO: "Shader" functions
+// TODO: Textures
+// TODO: Editor
+
 #ifdef MEMDEBUG
 void *d_malloc(size_t s) {
     void *res = malloc(s);
@@ -102,8 +106,7 @@ int main(int argc, char *argv[]) {
 
     uint16_t *const depth_buffer = (uint16_t *)malloc(SCREEN_HEIGHT * SCREEN_WIDTH * sizeof(*depth_buffer));
     if (depth_buffer == NULL) return -2;
-    bool render_depth = false;
-    g_depth_buffer    = depth_buffer;
+    g_depth_buffer = depth_buffer;
 
     const int8_t *keys      = (const int8_t *)SDL_GetKeyboardState(NULL);
     int8_t *const last_keys = (int8_t *)malloc(SDL_NUM_SCANCODES * sizeof(*last_keys));
@@ -126,6 +129,10 @@ int main(int argc, char *argv[]) {
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
 
+    bool render_depth  = false;
+    bool render_map    = false;
+    bool render_overlay = false;
+
     Image main_font;
     const unsigned MAIN_FONT_CHAR_WIDTH = 16;
     if (!readPng("res/fonts/vhs.png", &main_font)) return -1;
@@ -138,8 +145,8 @@ int main(int argc, char *argv[]) {
     cam.pos[1] = -4.0f;
     cam.pos[2] = 0.0f;
     cam.rot    = 0.0f;
-    cam.pitch = 0.0f;
-    cam.fov = 90.0f * TO_RADS;
+    cam.pitch  = 0.0f;
+    cam.fov    = 90.0f * TO_RADS;
 
     mat3 view_mat;
 
@@ -212,16 +219,28 @@ int main(int argc, char *argv[]) {
                 render_depth = !render_depth;
             }
 
-            float input_h = keys[SDL_SCANCODE_D] - keys[SDL_SCANCODE_A];
-            float input_v = keys[SDL_SCANCODE_S] - keys[SDL_SCANCODE_W];
-            float input_fov = keys[SDL_SCANCODE_Q] - keys[SDL_SCANCODE_Z];
-            float input_p = keys[SDL_SCANCODE_UP] - keys[SDL_SCANCODE_DOWN];
-            float input_r = keys[SDL_SCANCODE_RIGHT] - keys[SDL_SCANCODE_LEFT];
+            if (keys[SDL_SCANCODE_M] && !last_keys[SDL_SCANCODE_M]) {
+                render_map = !render_map;
+            }
 
-            cam.pitch += input_p * delta;
+            if (keys[SDL_SCANCODE_O] && !last_keys[SDL_SCANCODE_O]) {
+                render_overlay = !render_overlay;
+            }
+
+
+            float input_h   = keys[SDL_SCANCODE_D] - keys[SDL_SCANCODE_A];
+            float input_v   = keys[SDL_SCANCODE_S] - keys[SDL_SCANCODE_W];
+            float input_fov = keys[SDL_SCANCODE_Q] - keys[SDL_SCANCODE_Z];
+            float input_p   = keys[SDL_SCANCODE_UP] - keys[SDL_SCANCODE_DOWN];
+            float input_r   = keys[SDL_SCANCODE_RIGHT] - keys[SDL_SCANCODE_LEFT];
+
+
             cam.rot += input_r * delta * 2.0f;
             cam.rot_cos = cosf(cam.rot);
             cam.rot_sin = sinf(cam.rot);
+
+            cam.pitch += input_p * delta;
+            cam.pitch = clamp(cam.pitch, -1.0f, 1.0f);
 
             cam.fov += input_fov * delta * 0.5f;
             cam.fov = clamp(cam.fov, 30.0f * TO_RADS, 120.0f * TO_RADS);
@@ -320,7 +339,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        { // Render map overlay
+        if (render_map) { // Render map overlay
             for (unsigned i = 0; i < pod.num_sectors; ++i) {
                 SectorDef sector = pod.sectors[i];
 
@@ -378,7 +397,7 @@ int main(int argc, char *argv[]) {
             setPixel(screen_cam_pos[0], screen_cam_pos[1], COLOR_RED);
         }
 
-        if (cam.sector < pod.num_sectors) {
+        if (render_overlay && cam.sector < pod.num_sectors) {
             snprintf(print_buffer, sizeof(print_buffer), "SECTOR: %i", cam.sector);
             renderText(print_buffer, 0, 0, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
 
@@ -386,6 +405,9 @@ int main(int argc, char *argv[]) {
             renderText(print_buffer, 0, 24, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
             snprintf(print_buffer, sizeof(print_buffer), "FLOOR: %f", pod.sectors[cam.sector].floor_height);
             renderText(print_buffer, 0, 24 * 2, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
+
+            snprintf(print_buffer, sizeof(print_buffer), "PITCH: %f", cam.pitch);
+            renderText(print_buffer, 0, 24 * 3, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
         }
 
         SDL_UnlockTexture(screen_texture);

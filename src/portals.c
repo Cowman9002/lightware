@@ -51,14 +51,36 @@ unsigned getCurrentSector(PortalWorld pod, vec2 point, unsigned last_sector) {
 
 extern uint16_t *g_depth_buffer;
 
-#define FLASHLIGHT_CUTOFF 0.97f
-#define FLASHLIGHT_OUTER_CUTOFF 0.93f
-#define FLASHLIGHT_POWER 10.0f
+#define FLASHLIGHT_CUTOFF 0.99f
+#define FLASHLIGHT_OUTER_CUTOFF 0.94f
 
 void renderPortalWorld(PortalWorld pod, Camera cam) {
 #define SECTOR_QUEUE_SIZE 128
-    const float TAN_FOV_HALF = tanf(cam.fov * 0.5f);
+    const float TAN_FOV_HALF     = tanf(cam.fov * 0.5f);
     const float INV_TAN_FOV_HALF = 1.0f / TAN_FOV_HALF;
+
+    // TODO: TEMP
+    float FLASHLIGHT_POWER;
+    {
+        FLASHLIGHT_POWER = rand() % 100;
+        if(FLASHLIGHT_POWER < 3) {
+            FLASHLIGHT_POWER = 0.0f;
+        } else if(FLASHLIGHT_POWER < 10) {
+            FLASHLIGHT_POWER = 2.0f;
+        } else {
+            FLASHLIGHT_POWER = 5.0f;
+        }
+    }
+
+    // rot_sin + rot_cos always length = 1
+    vec3 cam_forward = {
+        cam.rot_sin,
+        -cam.rot_cos,
+        atanf(cam.pitch),
+    };
+
+    normalize3d(cam_forward);
+
 
     int sector_queue[SECTOR_QUEUE_SIZE];
     unsigned sector_queue_start = 0, sector_queue_end = 0;
@@ -97,10 +119,11 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
         // render ceiling
         if (dist_to_ceiling > 0.0) {
-            float scale = 2.0f * dist_to_ceiling;
-            for (int y = 0; y < SCREEN_HEIGHT_HALF; ++y) {
+            float scale   = 2.0f * dist_to_ceiling;
+            float horizon = (0.5 + cam.pitch) * SCREEN_HEIGHT;
+            for (int y = 0; y < horizon; ++y) {
                 float wy = -1.0f; // half_view_plane . tan(fov / 2)
-                float wz = (1.0f - y / SCREEN_HEIGHT_HALF) * TAN_FOV_HALF;
+                float wz = (1.0f - (y - cam.pitch * SCREEN_HEIGHT) / SCREEN_HEIGHT_HALF) * TAN_FOV_HALF;
 
                 for (int x = 0; x < SCREEN_WIDTH; ++x) {
                     if (y < occlusion_top[x] || y >= occlusion_bottom[x]) continue;
@@ -118,10 +141,10 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                     vec3 light = { to_cam[0] / to_cam_dist, to_cam[1] / to_cam_dist, to_cam[2] / to_cam_dist };
 
-                    float attenuation    = clamp(FLASHLIGHT_POWER / to_cam_dist, 0.0f, 1.0f);
-                    float ndotl          = clamp(dot3d(light, VEC3(0.0f, 0.0f, -1.0f)), 0.0f, 1.0f);
-                    
-                    float spot_theta     = -dot3d(light, VEC3(cam.rot_sin, -cam.rot_cos, 0.0f));
+                    float attenuation = clamp(FLASHLIGHT_POWER / to_cam_dist, 0.0f, 1.0f);
+                    float ndotl       = clamp(dot3d(light, VEC3(0.0f, 0.0f, -1.0f)), 0.0f, 1.0f);
+
+                    float spot_theta     = -dot3d(light, cam_forward);
                     float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
                     float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
 
@@ -129,7 +152,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                     int checker = (int)(floorf(px) + floorf(py)) % 2;
                     Color color = checker ? COLOR_RED : RGB(128, 0, 0);
-                    // color       = mulColor(color, lighting * 255);
+                    color       = mulColor(color, lighting * 255);
                     setPixel(x, y, color);
                 }
             }
@@ -137,11 +160,13 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
         // render floor
         if (dist_to_floor > 0.0) {
-            float scale = 2.0f * dist_to_floor;
-            for (int y = 0; y < SCREEN_HEIGHT_HALF; ++y) {
+            float scale   = 2.0f * dist_to_floor;
+            float horizon = (0.5 - cam.pitch) * SCREEN_HEIGHT;
+
+            for (int y = 0; y < horizon; ++y) {
                 int pixel_y = SCREEN_HEIGHT - y - 1;
                 float wy    = -1.0f;
-                float wz    = (1.0f - y / SCREEN_HEIGHT_HALF) * TAN_FOV_HALF;
+                float wz    = (1.0f - (y + cam.pitch * SCREEN_HEIGHT) / SCREEN_HEIGHT_HALF) * TAN_FOV_HALF;
 
                 for (int x = 0; x < SCREEN_WIDTH; ++x) {
                     if (pixel_y < occlusion_top[x] || pixel_y >= occlusion_bottom[x]) continue;
@@ -162,7 +187,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     float attenuation = clamp(FLASHLIGHT_POWER / to_cam_dist, 0.0f, 1.0f);
                     float ndotl       = clamp(dot3d(light, VEC3(0.0f, 0.0f, 1.0f)), 0.0f, 1.0f);
 
-                    float spot_theta     = -dot3d(light, VEC3(cam.rot_sin, -cam.rot_cos, 0.0f));
+                    float spot_theta     = -dot3d(light, cam_forward);
                     float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
                     float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
 
@@ -170,7 +195,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                     int checker = (int)(floorf(px) + floorf(py)) % 2;
                     Color color = checker ? COLOR_GREEN : RGB(0, 128, 0);
-                    // color       = mulColor(color, lighting * 255);
+                    color       = mulColor(color, lighting * 255);
                     setPixel(x, pixel_y, color);
                 }
             }
@@ -270,13 +295,13 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             }
 
             float top_of_wall[2] = {
-                (0.5 - dist_to_ceiling * ndc_space.points[0][1] * INV_TAN_FOV_HALF) * SCREEN_HEIGHT,
-                (0.5 - dist_to_ceiling * ndc_space.points[1][1] * INV_TAN_FOV_HALF) * SCREEN_HEIGHT,
+                (0.5 - dist_to_ceiling * ndc_space.points[0][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
+                (0.5 - dist_to_ceiling * ndc_space.points[1][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
             };
 
             float bottom_of_wall[2] = {
-                (1.0 - (0.5 - dist_to_floor * ndc_space.points[0][1] * INV_TAN_FOV_HALF)) * SCREEN_HEIGHT,
-                (1.0 - (0.5 - dist_to_floor * ndc_space.points[1][1] * INV_TAN_FOV_HALF)) * SCREEN_HEIGHT,
+                (1.0 - (0.5 - dist_to_floor * ndc_space.points[0][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
+                (1.0 - (0.5 - dist_to_floor * ndc_space.points[1][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
             };
 
             start_x = clamp(start_x, 0, SCREEN_WIDTH);
@@ -341,7 +366,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         float attenuation = clamp(FLASHLIGHT_POWER / to_cam_dist, 0.0f, 1.0f);
                         float ndotl       = clamp(dot3d(light, VEC3(wall_norm[0], wall_norm[1], 0.0f)), 0.0f, 1.0f);
 
-                        float spot_theta     = -dot3d(light, VEC3(cam.rot_sin, -cam.rot_cos, 0.0f));
+                        float spot_theta     = -dot3d(light, cam_forward);
                         float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
                         float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
 
@@ -349,7 +374,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                         int checker = (int)(floorf(u) + floorf(v)) % 2;
                         Color color = checker ? COLOR_BLUE : RGB(0, 0, 128);
-                        // color       = mulColor(color, lighting * 255);
+                        color       = mulColor(color, lighting * 255);
                         setPixel(x, y, color);
                     }
                 }
@@ -359,13 +384,13 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                 float dist_to_nfloor   = (cam.pos[2] - pod.sectors[wall_next].floor_height);
 
                 float top_of_nwall[2] = {
-                    (0.5 - dist_to_nceiling * ndc_space.points[0][1] * INV_TAN_FOV_HALF) * SCREEN_HEIGHT,
-                    (0.5 - dist_to_nceiling * ndc_space.points[1][1] * INV_TAN_FOV_HALF) * SCREEN_HEIGHT,
+                    (0.5 - dist_to_nceiling * ndc_space.points[0][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
+                    (0.5 - dist_to_nceiling * ndc_space.points[1][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
                 };
 
                 float bottom_of_nwall[2] = {
-                    (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[0][1] * INV_TAN_FOV_HALF)) * SCREEN_HEIGHT,
-                    (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1] * INV_TAN_FOV_HALF)) * SCREEN_HEIGHT,
+                    (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[0][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
+                    (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
                 };
 
                 for (int x = start_x; x <= end_x; ++x) {
@@ -380,7 +405,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     int depth = FLOAT_TO_DEPTH(z);
 
                     float u = lerp(attr[0].uv[0], attr[1].uv[0], tx);
-                    // // perspective correct mapping
+                    // perspective correct mapping
                     u *= z;
 
                     vec3 world_pos = {
@@ -392,8 +417,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     int start_y_real = start_y;
                     int end_y_real   = end_y;
 
-                    start_y  = clamp(start_y, occlusion_top[x], occlusion_bottom[x]);
-                    end_y    = clamp(end_y, occlusion_top[x], occlusion_bottom[x]);
+                    start_y = clamp(start_y, occlusion_top[x], occlusion_bottom[x]);
+                    end_y   = clamp(end_y, occlusion_top[x], occlusion_bottom[x]);
 
                     start_ny = min(clamp(start_ny, occlusion_top[x], occlusion_bottom[x]), end_y);
                     end_ny   = max(clamp(end_ny, occlusion_top[x], occlusion_bottom[x]), start_y);
@@ -420,7 +445,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         float attenuation = clamp(FLASHLIGHT_POWER / to_cam_dist, 0.0f, 1.0f);
                         float ndotl       = clamp(dot3d(light, VEC3(wall_norm[0], wall_norm[1], 0.0f)), 0.0f, 1.0f);
 
-                        float spot_theta     = -dot3d(light, VEC3(cam.rot_sin, -cam.rot_cos, 0.0f));
+                        float spot_theta     = -dot3d(light, cam_forward);
                         float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
                         float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
 
@@ -428,7 +453,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                         int checker = (int)(floorf(u) + floorf(v)) % 2;
                         Color color = checker ? RGB(200, 0, 255) : RGB(100, 0, 128);
-                        // color       = mulColor(color, lighting * 255);
+                        color       = mulColor(color, lighting * 255);
                         setPixel(x, y, color);
                     }
 
@@ -450,7 +475,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         float attenuation = clamp(FLASHLIGHT_POWER / to_cam_dist, 0.0f, 1.0f);
                         float ndotl       = clamp(dot3d(light, VEC3(wall_norm[0], wall_norm[1], 0.0f)), 0.0f, 1.0f);
 
-                        float spot_theta     = -dot3d(light, VEC3(cam.rot_sin, -cam.rot_cos, 0.0f));
+                        float spot_theta     = -dot3d(light, cam_forward);
                         float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
                         float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
 
@@ -458,7 +483,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                         int checker = (int)(floorf(u) + floorf(v)) % 2;
                         Color color = checker ? RGB(0, 200, 255) : RGB(0, 100, 128);
-                        // color       = mulColor(color, lighting * 255);
+                        color       = mulColor(color, lighting * 255);
                         setPixel(x, y, color);
                     }
                 }

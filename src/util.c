@@ -26,6 +26,15 @@ float dist3d(vec3 a, vec3 b) {
     return sqrtf(sqr_dist);
 }
 
+float normalize3d(vec3 a) {
+    float len = sqrtf(dot3d(a, a));
+    if (len != 0) {
+        for (unsigned i = 0; i < 3; ++i)
+            a[i] /= len;
+    }
+    return len;
+}
+
 
 void mat3Translate(vec2 t, mat3 out) {
     out[0 + 0 * 3] = 1.0f;

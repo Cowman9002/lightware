@@ -19,5 +19,6 @@ typedef struct Color {
 #define COLOR_CYAN ((Color){ .r = 0, .g = 255, .b = 255, .a = 255 })
 #define COLOR_PURPLE ((Color){ .r = 255, .g = 0, .b = 255, .a = 255 })
 
+Color lerpColor(Color c0, Color c1, uint8_t t);
 Color mixColor(Color c0, Color c1);
 Color mulColor(Color c0, uint8_t m);

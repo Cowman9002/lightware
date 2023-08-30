@@ -14,9 +14,10 @@
 #include <stdbool.h>
 #include <assert.h>
 
-// TODO: Textures
-// TODO: reduce ceiling and floor overdraw
+// TODO: Sector over sector
 // TODO: Editor
+// TODO: Mip mapping
+// TODO: reduce ceiling and floor overdraw
 
 #ifdef MEMDEBUG
 void *d_malloc(size_t s) {
@@ -70,6 +71,7 @@ typedef struct WallDraw {
 } WallDraw;
 
 uint16_t *g_depth_buffer;
+bool *g_stencil_buffer; // TODO: Maybe bit array instead depending on speed
 
 Image g_image_array[3];
 
@@ -96,6 +98,10 @@ int main(int argc, char *argv[]) {
     uint16_t *const depth_buffer = (uint16_t *)malloc(SCREEN_HEIGHT * SCREEN_WIDTH * sizeof(*depth_buffer));
     if (depth_buffer == NULL) return -2;
     g_depth_buffer = depth_buffer;
+
+    bool *const stencil_buffer = (bool *)malloc(SCREEN_HEIGHT * SCREEN_WIDTH * sizeof(*stencil_buffer));
+    if (stencil_buffer == NULL) return -2;
+    g_stencil_buffer = stencil_buffer;
 
     const int8_t *keys      = (const int8_t *)SDL_GetKeyboardState(NULL);
     int8_t *const last_keys = (int8_t *)malloc(SDL_NUM_SCANCODES * sizeof(*last_keys));
@@ -132,8 +138,8 @@ int main(int argc, char *argv[]) {
     Camera cam;
     cam.sector = -1;
     cam.pos[0] = 0.0f;
-    cam.pos[1] = -4.0f;
-    cam.pos[2] = 0.0f;
+    cam.pos[1] = 0.0f;
+    cam.pos[2] = 1.65f;
     cam.rot    = 0.0f;
     cam.pitch  = 0.0f;
     cam.fov    = 90.0f * TO_RADS;
@@ -142,39 +148,39 @@ int main(int argc, char *argv[]) {
 
     PortalWorld pod = {
         .sectors = (SectorDef[]){
-            (SectorDef){ 0, 4, 3.5f, 0.0f },
-            (SectorDef){ 4, 6, 6.0f, 0.2f },
+            (SectorDef){ 0, 6, 1, (float[]){0.0f}, (float[]){10.0f} },
+            (SectorDef){ 6, 4, 2, (float[]){1.0f, 1.0f}, (float[]){4.0f, 5.0f} },
         },
         .num_sectors = 2,
         .wall_lines  = (Line[]){
             // sector 1
-            { { { -5.0f, -5.0f }, { 5.0f, -5.0f } } },
-            { { { 5.0f, -5.0f }, { 5.0f, 50.0f } } },
-            { { { 5.0f, 50.0f }, { -5.0f, 50.0f } } },
-            { { { -5.0f, 50.0f }, { -5.0f, -5.0f } } },
-            // sector 2
-            { { { 5.0f, -5.0f }, { -5.0f, -5.0f } } },
-            { { { -5.0f, -5.0f }, { -10.0f, -12.0f } } },
-            { { { -10.0f, -12.0f }, { -10.0f, -20.0f } } },
-            { { { -10.0f, -20.0f }, { 20.0f, -25.0f } } },
-            { { { 20.0f, -25.0f }, { 20.0f, -12.0f } } },
-            { { { 20.0f, -12.0f }, { 5.0f, -5.0f } } },
+            { { { 10.0f, 5.0f }, { -10.0f, 5.0f } } },
+            { { { -10.0f, 5.0f }, { -10.0f, -50.0f } } },
+            { { { -10.0f, -50.0f }, { 10.0f, -50.0f } } },
+            { { { 10.0f, -50.0f }, { 10.0f, -30.0f } } },
+            { { { 10.0f, -30.0f }, { 10.0f, -10.0f } } },
+            { { { 10.0f, -10.0f }, { 10.0f, 5.0f } } },
+            // sector 1
+            { { { 10.0f, -10.0f }, { 10.0f, -30.0f } } },
+            { { { 10.0f, -30.0f }, { 20.0f, -30.0f } } },
+            { { { 20.0f, -30.0f }, { 20.0f, -10.0f } } },
+            { { { 20.0f, -10.0f }, { 10.0f, -10.0f } } },
         },
         .wall_nexts = (unsigned[]){
             // sector 1
+            INVALID_SECTOR_INDEX,
+            INVALID_SECTOR_INDEX,
+            INVALID_SECTOR_INDEX,
+            INVALID_SECTOR_INDEX,
             1,
-            INVALID_SECTOR_INDEX,
-            INVALID_SECTOR_INDEX,
             INVALID_SECTOR_INDEX,
             // sector 2
             0,
             INVALID_SECTOR_INDEX,
             INVALID_SECTOR_INDEX,
             INVALID_SECTOR_INDEX,
-            INVALID_SECTOR_INDEX,
-            INVALID_SECTOR_INDEX,
         },
-        .num_walls = 11,
+        .num_walls = 10,
     };
 
     /////////////////////////////////////////////////////////////
@@ -215,13 +221,12 @@ int main(int argc, char *argv[]) {
                 render_overlay = !render_overlay;
             }
 
-
             float input_h   = keys[SDL_SCANCODE_D] - keys[SDL_SCANCODE_A];
             float input_v   = keys[SDL_SCANCODE_S] - keys[SDL_SCANCODE_W];
+            float input_z   = keys[SDL_SCANCODE_SPACE] - keys[SDL_SCANCODE_LSHIFT];
             float input_fov = keys[SDL_SCANCODE_Q] - keys[SDL_SCANCODE_Z];
             float input_p   = keys[SDL_SCANCODE_UP] - keys[SDL_SCANCODE_DOWN];
             float input_r   = keys[SDL_SCANCODE_RIGHT] - keys[SDL_SCANCODE_LEFT];
-
 
             cam.rot += input_r * delta * 2.0f;
             cam.rot_cos = cosf(cam.rot);
@@ -288,20 +293,27 @@ int main(int argc, char *argv[]) {
 
             cam.pos[0] = new_pos[0];
             cam.pos[1] = new_pos[1];
+            cam.pos[2] += input_z * delta * 10.0f;
 
             // printf("%f, %f\n", cam.pos[0], cam.pos[1]);
 
             cam.sector = getCurrentSector(pod, cam.pos, cam.sector);
+            cam.tier = getSectorTier(pod, cam.pos[2], cam.sector);
 
             if (cam.sector < pod.num_sectors) {
-                cam.pos[2] = pod.sectors[cam.sector].floor_height + 1.65f;
+                if (cam.tier >= pod.sectors[cam.sector].num_tiers) cam.tier = 0;
+                
+                // cam.pos[2] = pod.sectors[cam.sector].floor_heights[0] + 1.65f;
                 // cam.pos[2] = pod.sectors[cam.sector].floor_height + 0.5f;
 
                 float input_ceil  = keys[SDL_SCANCODE_R] - keys[SDL_SCANCODE_E];
                 float input_floor = keys[SDL_SCANCODE_Y] - keys[SDL_SCANCODE_T];
 
-                pod.sectors[cam.sector].ceiling_height += input_ceil * delta;
-                pod.sectors[cam.sector].floor_height += input_floor * delta;
+                pod.sectors[cam.sector].ceiling_heights[cam.tier] += input_ceil * delta;
+                pod.sectors[cam.sector].floor_heights[cam.tier] += input_floor * delta;
+            } else {
+                cam.sector = 0;
+                cam.tier = 0;
             }
         }
 
@@ -392,15 +404,16 @@ int main(int argc, char *argv[]) {
 
         if (render_overlay && cam.sector < pod.num_sectors) {
             snprintf(print_buffer, sizeof(print_buffer), "SECTOR: %i", cam.sector);
+            renderText(print_buffer, 1, 1, COLOR_BLACK, main_font, MAIN_FONT_CHAR_WIDTH);
             renderText(print_buffer, 0, 0, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
 
-            snprintf(print_buffer, sizeof(print_buffer), "CEIL: %f", pod.sectors[cam.sector].ceiling_height);
+            snprintf(print_buffer, sizeof(print_buffer), "CEIL: %f", pod.sectors[cam.sector].ceiling_heights[cam.tier]);
+            renderText(print_buffer, 1, 24+1, COLOR_BLACK, main_font, MAIN_FONT_CHAR_WIDTH);
             renderText(print_buffer, 0, 24, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
-            snprintf(print_buffer, sizeof(print_buffer), "FLOOR: %f", pod.sectors[cam.sector].floor_height);
-            renderText(print_buffer, 0, 24 * 2, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
 
-            snprintf(print_buffer, sizeof(print_buffer), "PITCH: %f", cam.pitch);
-            renderText(print_buffer, 0, 24 * 3, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
+            snprintf(print_buffer, sizeof(print_buffer), "FLOOR: %f", pod.sectors[cam.sector].floor_heights[cam.tier]);
+            renderText(print_buffer, 1, 24 * 2+1, COLOR_BLACK, main_font, MAIN_FONT_CHAR_WIDTH);
+            renderText(print_buffer, 0, 24 * 2, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
         }
 
         SDL_UnlockTexture(screen_texture);
@@ -412,6 +425,7 @@ int main(int argc, char *argv[]) {
 
 _success_exit:
     free(last_keys);
+    free(stencil_buffer);
     free(depth_buffer);
     SDL_DestroyTexture(screen_texture);
     SDL_DestroyRenderer(renderer);

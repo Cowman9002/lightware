@@ -7,6 +7,10 @@
 #include <math.h>
 #include <stdio.h>
 
+#define NO_CEILINGS
+// #define NO_FLOORS
+// #define NO_STEPS
+
 typedef struct WallAttribute {
     vec2 uv;
     vec3 world_pos;
@@ -51,7 +55,19 @@ unsigned getCurrentSector(PortalWorld pod, vec2 point, unsigned last_sector) {
     return INVALID_SECTOR_INDEX;
 }
 
+unsigned getSectorTier(PortalWorld pod, float z, unsigned sector_id) {
+    SectorDef sector = pod.sectors[sector_id];
+    for (unsigned i = 0; i < sector.num_tiers; ++i) {
+        float sector_world_floor   = i == 0 ? sector.floor_heights[i] : sector.floor_heights[i] + sector.ceiling_heights[0];
+        float sector_world_ceiling = i == 0 ? sector.ceiling_heights[i] : sector.ceiling_heights[i] + sector.ceiling_heights[0];
+
+        if (z >= sector_world_floor && z <= sector_world_ceiling) return i;
+    }
+    return INVALID_SECTOR_INDEX;
+}
+
 extern uint16_t *g_depth_buffer;
+extern bool *g_stencil_buffer;
 
 #define FLASHLIGHT_CUTOFF 0.98f
 #define FLASHLIGHT_OUTER_CUTOFF 0.9f
@@ -61,31 +77,33 @@ static float s_flashlight_power;
 extern Image g_image_array[3];
 
 bool pixelProgram(WallAttribute attr, Camera cam, unsigned texid, Color *o_color) {
-    vec3 to_cam       = { cam.pos[0] - attr.world_pos[0], cam.pos[1] - attr.world_pos[1], cam.pos[2] - attr.world_pos[2] };
-    float to_cam_dist = sqrtf(dot3d(to_cam, to_cam));
 
-    vec3 light;
-    normalized3d(to_cam, light);
+    float lighting = AMBIENT;
 
-    float attenuation = clamp(s_flashlight_power / to_cam_dist, 0.0f, 1.0f);
-    float ndotl       = clamp(dot3d(light, attr.normal), 0.0f, 1.0f);
+    vec3 to_light    = { cam.pos[0] - attr.world_pos[0], cam.pos[1] - attr.world_pos[1], cam.pos[2] - attr.world_pos[2] };
+    float light_dist = normalize3d(to_light);
 
-    float spot_theta     = -dot3d(light, cam.forward);
+    // float attenuation = clamp(s_flashlight_power / light_dist, 0.0f, 1.0f);
+    float attenuation = clamp(30.0f / light_dist, 0.0f, 1.0f);
+    float ndotl       = clamp(dot3d(to_light, attr.normal), 0.0f, 1.0f);
+
+    float spot_theta     = -dot3d(to_light, cam.forward);
     float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
     float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
 
-    float lighting = clamp(AMBIENT + spot_intensity * attenuation * ndotl, 0.0f, 1.0f);
+    // lighting = clamp(lighting + spot_intensity * attenuation * ndotl, 0.0f, 1.0f);
+    lighting = clamp(lighting + attenuation * ndotl, 0.0f, 1.0f);
 
     // int checker = (int)(floorf(attr.uv[0]) + floorf(attr.uv[1])) % 2;
     // *o_color    = checker ? color : mulColor(color, 128);
     if (texid >= 3) texid = 0;
 
     {
-        Image img      = g_image_array[texid];
-        float u = modff(attr.uv[0], NULL);
-        float v = modff(attr.uv[1], NULL);
-        if(u < 0) u += 1;
-        if(v < 0) v += 1;
+        Image img = g_image_array[texid];
+        float u   = modff(attr.uv[0], NULL);
+        float v   = modff(attr.uv[1], NULL);
+        if (u < 0) u += 1;
+        if (v < 0) v += 1;
 
         unsigned tex_x = (u * (g_image_array->width - 1));
         unsigned tex_y = (v * (g_image_array->height - 1));
@@ -107,27 +125,28 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
         if (s_flashlight_power < 3) {
             s_flashlight_power = 0.0f;
         } else if (s_flashlight_power < 10) {
-            s_flashlight_power = 2.0f;
+            s_flashlight_power = 3.0f;
         } else {
-            s_flashlight_power = 5.0f;
+            s_flashlight_power = 7.0f;
         }
     }
 
-    int sector_queue[SECTOR_QUEUE_SIZE];
+    unsigned sector_queue[SECTOR_QUEUE_SIZE];
+    unsigned tier_queue[SECTOR_QUEUE_SIZE];
     unsigned sector_queue_start = 0, sector_queue_end = 0;
 
     if (cam.sector < pod.num_sectors) {
         sector_queue[sector_queue_end] = cam.sector;
+        tier_queue[sector_queue_end]   = cam.tier;
     } else {
         sector_queue[sector_queue_end] = 0;
+        tier_queue[sector_queue_end]   = 0;
     }
     sector_queue_end = (sector_queue_end + 1) % SECTOR_QUEUE_SIZE;
 
-    int occlusion_top[SCREEN_WIDTH];    // inclusive
-    int occlusion_bottom[SCREEN_WIDTH]; // exclusive
-    for (unsigned i = 0; i < SCREEN_WIDTH; ++i) {
-        occlusion_top[i]    = 0;
-        occlusion_bottom[i] = SCREEN_HEIGHT;
+    // clear stencil buffer
+    for (unsigned i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; ++i) {
+        g_stencil_buffer[i] = false;
     }
 
     // loop variables
@@ -138,20 +157,27 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
     // bredth first traversal of sectors
     while (sector_queue_start != sector_queue_end) {
+        // pop
         unsigned sector_index = sector_queue[sector_queue_start];
-        if (sector_index >= pod.num_sectors) break; // avoid invalid sectors
+        unsigned tier_index   = tier_queue[sector_queue_start];
+        sector_queue_start    = (sector_queue_start + 1) % SECTOR_QUEUE_SIZE;
 
-        // pop sector from queue
-        SectorDef sector   = pod.sectors[sector_index];
-        sector_queue_start = (sector_queue_start + 1) % SECTOR_QUEUE_SIZE;
+        if (sector_index >= pod.num_sectors) continue; // avoid invalid sectors
+        SectorDef sector = pod.sectors[sector_index];
+        if (tier_index >= sector.num_tiers) continue; // avoid invalid tiers
 
-        float dist_to_ceiling = (sector.ceiling_height - cam.pos[2]);
-        float dist_to_floor   = (cam.pos[2] - sector.floor_height);
+        float sector_world_floor   = tier_index == 0 ? sector.floor_heights[tier_index] : sector.floor_heights[tier_index] + sector.ceiling_heights[0];
+        float sector_world_ceiling = tier_index == 0 ? sector.ceiling_heights[tier_index] : sector.ceiling_heights[tier_index] + sector.ceiling_heights[0];
+
+        float dist_to_floor   = (cam.pos[2] - sector_world_floor);
+        float dist_to_ceiling = (sector_world_ceiling - cam.pos[2]);
+
+#ifndef NO_CEILINGS
 
         // render ceiling
         if (dist_to_ceiling > 0.0) {
-            float scale   = 2.0f * dist_to_ceiling;
-            float horizon = (0.5 + cam.pitch) * SCREEN_HEIGHT;
+            float scale = 2.0f * dist_to_ceiling;
+            int horizon = (0.5 + cam.pitch) * SCREEN_HEIGHT;
             for (int y = 0; y < horizon; ++y) {
                 float wy = -1.0f; // half_view_plane . tan(fov / 2)
                 float wz = (1.0f - (y - cam.pitch * SCREEN_HEIGHT) / SCREEN_HEIGHT_HALF) * TAN_FOV_HALF;
@@ -181,40 +207,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             }
         }
 
-        // render floor
-        if (dist_to_floor > 0.0) {
-            float scale   = 2.0f * dist_to_floor;
-            float horizon = (0.5 - cam.pitch) * SCREEN_HEIGHT;
-
-            for (int y = 0; y < horizon; ++y) {
-                int pixel_y = SCREEN_HEIGHT - y - 1;
-                float wy    = -1.0f;
-                float wz    = (1.0f - (y + cam.pitch * SCREEN_HEIGHT) / SCREEN_HEIGHT_HALF) * TAN_FOV_HALF;
-
-                for (int x = 0; x < SCREEN_WIDTH; ++x) {
-                    if (pixel_y < occlusion_top[x] || pixel_y >= occlusion_bottom[x]) continue;
-
-                    float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO * TAN_FOV_HALF;
-
-                    float rx = cam.rot_cos * wx + -cam.rot_sin * wy;
-                    float ry = cam.rot_sin * wx + cam.rot_cos * wy;
-
-                    float px = (rx * scale / wz + cam.pos[0]);
-                    float py = (ry * scale / wz + cam.pos[1]);
-
-                    WallAttribute attr = {
-                        .uv        = { px, py },
-                        .world_pos = { px, py, sector.floor_height },
-                        .normal    = { 0.0f, 0.0f, 1.0f },
-                    };
-                    Color color;
-
-                    if (pixelProgram(attr, cam, 1, &color)) {
-                        setPixel(x, pixel_y, color);
-                    }
-                }
-            }
-        }
+#endif
 
         // render every wall
         for (unsigned i = 0; i < sector.length; ++i) {
@@ -243,14 +236,14 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             attr[1].uv[0] = length;
 
             attr[0].uv[1] = 0.0f;
-            attr[1].uv[1] = sector.ceiling_height - sector.floor_height;
+            attr[1].uv[1] = sector_world_ceiling - sector_world_floor;
 
             attr[0].world_pos[0] = wall_line.points[0][0];
             attr[1].world_pos[0] = wall_line.points[1][0];
             attr[0].world_pos[1] = wall_line.points[0][1];
             attr[1].world_pos[1] = wall_line.points[1][1];
-            attr[0].world_pos[2] = sector.floor_height;
-            attr[1].world_pos[2] = sector.ceiling_height;
+            attr[0].world_pos[2] = sector_world_floor;
+            attr[1].world_pos[2] = sector_world_ceiling;
 
             // convert to view space
             {
@@ -280,8 +273,31 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                 if (!clipWall(clip_planes[1], &view_space, attr)) continue;
 
                 if (is_portal) {
-                    sector_queue[sector_queue_end] = wall_next;
-                    sector_queue_end               = (sector_queue_end + 1) % 128;
+                    if (wall_next < pod.num_sectors) {
+                        unsigned start_tier = getSectorTier(pod, cam.pos[2], wall_next);
+                        unsigned num_tiers  = pod.sectors[wall_next].num_tiers;
+
+                        if (start_tier >= num_tiers) start_tier = 0;
+
+                        sector_queue[sector_queue_end] = wall_next;
+                        tier_queue[sector_queue_end]   = start_tier;
+                        sector_queue_end               = (sector_queue_end + 1) % 128;
+
+                        // go down
+                        for (unsigned i = start_tier; i > 0;) {
+                            --i;
+                            sector_queue[sector_queue_end] = wall_next;
+                            tier_queue[sector_queue_end]   = i;
+                            sector_queue_end               = (sector_queue_end + 1) % 128;
+                        }
+
+                        // go up
+                        for (unsigned i = start_tier + 1; i < num_tiers; ++i) {
+                            sector_queue[sector_queue_end] = wall_next;
+                            tier_queue[sector_queue_end]   = i;
+                            sector_queue_end               = (sector_queue_end + 1) % 128;
+                        }
+                    }
                 }
 
                 if (!clipWall(clip_planes[2], &view_space, attr)) continue;
@@ -338,12 +354,13 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             if (!is_portal) {
                 // draw wall
                 for (int x = start_x; x <= end_x; ++x) {
+
                     float tx    = (float)(x - start_x) / (end_x - start_x);
                     int start_y = lerp(top_of_wall[0], top_of_wall[1], tx);
                     int end_y   = lerp(bottom_of_wall[0], bottom_of_wall[1], tx);
 
                     float z   = 1.0f / lerp(ndc_space.points[0][1], ndc_space.points[1][1], tx);
-                    int depth = (z / FAR_PLANE) * (uint16_t)(~0);
+                    int depth = FLOAT_TO_DEPTH(z);
 
                     float u = lerp(attr[0].uv[0], attr[1].uv[0], tx);
                     // // perspective correct mapping
@@ -358,20 +375,22 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     int start_y_real = start_y;
                     int end_y_real   = end_y;
 
-                    start_y = clamp(start_y, occlusion_top[x], occlusion_bottom[x]);
-                    end_y   = clamp(end_y, occlusion_top[x], occlusion_bottom[x]);
-
-                    occlusion_bottom[x] = 0;
+                    start_y = clamp(start_y, 0, SCREEN_HEIGHT);
+                    end_y   = clamp(end_y, 0, SCREEN_HEIGHT);
 
                     // wall
                     for (int y = start_y; y < end_y; ++y) {
+                        int depth_index = x + y * SCREEN_WIDTH;
+
+                        if (g_stencil_buffer[depth_index]) continue;
+                        g_stencil_buffer[depth_index] = true;
+
+                        g_depth_buffer[depth_index] = depth;
+
                         float ty = (float)(y - start_y_real) / (end_y_real - start_y_real);
 
                         float v      = lerp(attr[1].uv[1], attr[0].uv[1], ty);
                         world_pos[2] = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
-
-                        int depth_index             = x + y * SCREEN_WIDTH;
-                        g_depth_buffer[depth_index] = depth;
 
                         WallAttribute attr = {
                             .uv        = { u, v },
@@ -386,113 +405,185 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     }
                 }
             } else {
+#ifndef NO_STEPS
                 // draw steps
-                float dist_to_nceiling = (pod.sectors[wall_next].ceiling_height - cam.pos[2]);
-                float dist_to_nfloor   = (cam.pos[2] - pod.sectors[wall_next].floor_height);
+                SectorDef nsector = pod.sectors[wall_next];
+                for (unsigned ntier_index = 0; ntier_index < nsector.num_tiers; ++ntier_index) {
+                    float nsector_world_floor   = ntier_index == 0 ? nsector.floor_heights[ntier_index] : nsector.floor_heights[ntier_index] + nsector.ceiling_heights[0];
+                    float nsector_world_ceiling = ntier_index == 0 ? nsector.ceiling_heights[ntier_index] : nsector.ceiling_heights[ntier_index] + nsector.ceiling_heights[0];
 
-                float top_of_nwall[2] = {
-                    (0.5 - dist_to_nceiling * ndc_space.points[0][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
-                    (0.5 - dist_to_nceiling * ndc_space.points[1][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
-                };
+                    float dist_to_nfloor   = (cam.pos[2] - nsector_world_floor);
+                    float dist_to_nceiling = (nsector_world_ceiling - cam.pos[2]);
 
-                float bottom_of_nwall[2] = {
-                    (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[0][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
-                    (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
-                };
-
-                for (int x = start_x; x <= end_x; ++x) {
-                    float tx    = (float)(x - start_x) / (end_x - start_x);
-                    int start_y = lerp(top_of_wall[0], top_of_wall[1], tx);
-                    int end_y   = lerp(bottom_of_wall[0], bottom_of_wall[1], tx);
-
-                    int start_ny = lerp(top_of_nwall[0], top_of_nwall[1], tx);
-                    int end_ny   = lerp(bottom_of_nwall[0], bottom_of_nwall[1], tx);
-
-                    float z   = 1.0f / lerp(ndc_space.points[0][1], ndc_space.points[1][1], tx);
-                    int depth = FLOAT_TO_DEPTH(z);
-
-                    float u = lerp(attr[0].uv[0], attr[1].uv[0], tx);
-                    // perspective correct mapping
-                    u *= z;
-
-                    vec3 world_pos = {
-                        lerp(attr[0].world_pos[0], attr[1].world_pos[0], tx) * z,
-                        lerp(attr[0].world_pos[1], attr[1].world_pos[1], tx) * z,
-                        0.0f,
+                    float top_of_nwall[2] = {
+                        (0.5 - dist_to_nceiling * ndc_space.points[0][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
+                        (0.5 - dist_to_nceiling * ndc_space.points[1][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
                     };
 
-                    int start_y_real = start_y;
-                    int end_y_real   = end_y;
+                    float bottom_of_nwall[2] = {
+                        (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[0][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
+                        (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
+                    };
 
-                    start_y = clamp(start_y, occlusion_top[x], occlusion_bottom[x]);
-                    end_y   = clamp(end_y, occlusion_top[x], occlusion_bottom[x]);
+                    float top_of_step[2];
+                    float bottom_of_step[2];
 
-                    start_ny = min(clamp(start_ny, occlusion_top[x], occlusion_bottom[x]), end_y);
-                    end_ny   = max(clamp(end_ny, occlusion_top[x], occlusion_bottom[x]), start_y);
-
-                    occlusion_top[x]    = max(occlusion_top[x], max(start_y, start_ny));
-                    occlusion_bottom[x] = min(occlusion_bottom[x], min(end_y, end_ny));
-
-                    // top step
-                    for (int y = start_y; y < start_ny; ++y) {
-                        float ty     = (float)(y - start_y_real) / (end_y_real - start_y_real);
-                        float v      = lerp(attr[1].uv[1], attr[0].uv[1], ty);
-                        world_pos[2] = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
-
-                        int depth_index             = x + y * SCREEN_WIDTH;
-                        g_depth_buffer[depth_index] = depth;
-
-                        WallAttribute attr = {
-                            .uv        = { u, v },
-                            .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
-                            .normal    = { wall_norm[0], wall_norm[1], 0.0f },
-                        };
-                        Color color;
-
-                        if (pixelProgram(attr, cam, 0, &color)) {
-                            setPixel(x, y, color);
-                        }
+                    if (ntier_index >= nsector.num_tiers - 1) {
+                        // this is the very top step
+                        top_of_step[0] = top_of_wall[0];
+                        top_of_step[1] = top_of_wall[1];
+                    } else {
+                        // need to use the floor of above tier
+                        float nsector_world_floor = ntier_index + 1 == 0 ? nsector.floor_heights[ntier_index + 1] : nsector.floor_heights[ntier_index + 1] + nsector.ceiling_heights[0];
+                        float dist_to_nfloor      = (cam.pos[2] - nsector_world_floor);
+                        top_of_step[0]            = (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[0][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT;
+                        top_of_step[1]            = (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT;
                     }
 
-                    // bottom step
-                    for (int y = end_ny; y < end_y; ++y) {
+                    if (ntier_index == 0) {
+                        // this is the very first step
+                        bottom_of_step[0] = bottom_of_wall[0];
+                        bottom_of_step[1] = bottom_of_wall[1];
+                    } else {
+                        // dont draw bottom steps because they are covered by top step
+                        bottom_of_step[0] = bottom_of_nwall[0];
+                        bottom_of_step[1] = bottom_of_nwall[1];
+                    }
 
-                        float ty     = (float)(y - start_y_real) / (end_y_real - start_y_real);
-                        float v      = lerp(attr[1].uv[1], attr[0].uv[1], ty);
-                        world_pos[2] = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
+                    for (int x = start_x; x <= end_x; ++x) {
+                        float tx = (float)(x - start_x) / (end_x - start_x);
 
-                        int depth_index             = x + y * SCREEN_WIDTH;
-                        g_depth_buffer[depth_index] = depth;
+                        int start_y = lerp(top_of_step[0], top_of_step[1], tx);
+                        int end_y   = lerp(bottom_of_step[0], bottom_of_step[1], tx);
 
-                        WallAttribute attr = {
-                            .uv        = { u, v },
-                            .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
-                            .normal    = { wall_norm[0], wall_norm[1], 0.0f },
+                        int start_ny = lerp(top_of_nwall[0], top_of_nwall[1], tx);
+                        int end_ny   = lerp(bottom_of_nwall[0], bottom_of_nwall[1], tx);
+
+                        float z   = 1.0f / lerp(ndc_space.points[0][1], ndc_space.points[1][1], tx);
+                        int depth = FLOAT_TO_DEPTH(z);
+
+                        float u = lerp(attr[0].uv[0], attr[1].uv[0], tx);
+                        // perspective correct mapping
+                        u *= z;
+
+                        vec3 world_pos = {
+                            lerp(attr[0].world_pos[0], attr[1].world_pos[0], tx) * z,
+                            lerp(attr[0].world_pos[1], attr[1].world_pos[1], tx) * z,
+                            0.0f,
                         };
-                        Color color;
 
-                        if (pixelProgram(attr, cam, 0, &color)) {
-                            setPixel(x, y, color);
+                        int start_y_real = start_y;
+                        int end_y_real   = end_y;
+
+                        start_y = clamp(start_y, 0, SCREEN_HEIGHT);
+                        end_y   = clamp(end_y, 0, SCREEN_HEIGHT);
+
+                        start_ny = min(clamp(start_ny, 0, SCREEN_HEIGHT), end_y);
+                        end_ny   = max(clamp(end_ny, 0, SCREEN_HEIGHT), start_y);
+
+                        // top step
+                        for (int y = start_y; y < start_ny; ++y) {
+                            int depth_index = x + y * SCREEN_WIDTH;
+
+                            if (g_stencil_buffer[depth_index]) continue;
+                            g_stencil_buffer[depth_index] = true;
+
+                            g_depth_buffer[depth_index] = depth;
+                            float ty                    = (float)(y - start_y_real) / (end_y_real - start_y_real);
+                            float v                     = lerp(attr[1].uv[1], attr[0].uv[1], ty);
+                            world_pos[2]                = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
+
+                            WallAttribute attr = {
+                                .uv        = { u, v },
+                                .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
+                                .normal    = { wall_norm[0], wall_norm[1], 0.0f },
+                            };
+                            Color color;
+
+                            if (pixelProgram(attr, cam, 0, &color)) {
+                                setPixel(x, y, color);
+                            }
+                        }
+
+                        // bottom step
+                        for (int y = end_ny; y < end_y; ++y) {
+                            int depth_index = x + y * SCREEN_WIDTH;
+
+                            if (g_stencil_buffer[depth_index]) continue;
+                            g_stencil_buffer[depth_index] = true;
+
+                            g_depth_buffer[depth_index] = depth;
+                            float ty                    = (float)(y - start_y_real) / (end_y_real - start_y_real);
+                            float v                     = lerp(attr[1].uv[1], attr[0].uv[1], ty);
+                            world_pos[2]                = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
+
+                            WallAttribute attr = {
+                                .uv        = { u, v },
+                                .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
+                                .normal    = { wall_norm[0], wall_norm[1], 0.0f },
+                            };
+                            Color color;
+
+                            if (pixelProgram(attr, cam, 0, &color)) {
+                                setPixel(x, y, color);
+                            }
+                        }
+                    }
+                }
+#endif
+            }
+
+#ifndef NO_FLOORS
+            // render floor
+            if (dist_to_floor > 0.0) {
+                int floor_top = min(bottom_of_wall[0], bottom_of_wall[1]);
+
+                float scale = 2.0f * dist_to_floor;
+                int horizon = (0.5 + cam.pitch) * SCREEN_HEIGHT;
+
+                for (int y = SCREEN_HEIGHT - 1; y >= floor_top; --y) {
+                    float wy = -1.0f;
+                    float wz = (1.0f - ((SCREEN_HEIGHT_HALF - y + SCREEN_HEIGHT_HALF) + cam.pitch * SCREEN_HEIGHT) / SCREEN_HEIGHT_HALF) * TAN_FOV_HALF;
+
+                    float z     = clamp(wz == 0 ? 0 : (scale / wz), NEAR_PLANE, FAR_PLANE);
+                    float depth = FLOAT_TO_DEPTH(z);
+
+                    for (int x = start_x; x < end_x; ++x) {
+
+                        int depth_index = x + y * SCREEN_WIDTH;
+
+                        if (g_stencil_buffer[depth_index]) continue;
+                        g_stencil_buffer[depth_index] = true;
+
+                        if (depth < g_depth_buffer[depth_index]) {
+                            g_depth_buffer[depth_index] = depth;
+
+                            float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO * TAN_FOV_HALF;
+
+                            float rx = cam.rot_cos * wx + -cam.rot_sin * wy;
+                            float ry = cam.rot_sin * wx + cam.rot_cos * wy;
+
+                            float px = (rx * scale / wz + cam.pos[0]);
+                            float py = (ry * scale / wz + cam.pos[1]);
+
+                            WallAttribute attr = {
+                                .uv        = { px, py },
+                                .world_pos = { px, py, sector_world_floor },
+                                .normal    = { 0.0f, 0.0f, 1.0f },
+                            };
+                            Color color;
+
+                            if (pixelProgram(attr, cam, tier_index % 2 + 1, &color)) {
+                                setPixel(x, y, color);
+                            }
                         }
                     }
                 }
             }
+
+#endif
         }
     }
-
-    // for (unsigned x = 0; x < SCREEN_WIDTH; ++x) {
-    //     for (unsigned y = 0; y < occlusion_top[x]; ++y) {
-    //         setPixel(x, y, COLOR_BLACK);
-    //     }
-
-    //     for (unsigned y = occlusion_top[x]; y < occlusion_bottom[x]; ++y) {
-    //         setPixel(x, y, COLOR_WHITE);
-    //     }
-
-    //     for (unsigned y = occlusion_bottom[x]; y < SCREEN_HEIGHT; ++y) {
-    //         setPixel(x, y, COLOR_BLACK);
-    //     }
-    // }
 }
 
 //

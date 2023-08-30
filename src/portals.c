@@ -57,6 +57,9 @@ extern uint16_t *g_depth_buffer;
 
 void renderPortalWorld(PortalWorld pod, Camera cam) {
 #define SECTOR_QUEUE_SIZE 128
+    const float TAN_FOV_HALF = tanf(cam.fov * 0.5f);
+    const float INV_TAN_FOV_HALF = 1.0f / TAN_FOV_HALF;
+
     int sector_queue[SECTOR_QUEUE_SIZE];
     unsigned sector_queue_start = 0, sector_queue_end = 0;
 
@@ -96,13 +99,13 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
         if (dist_to_ceiling > 0.0) {
             float scale = 2.0f * dist_to_ceiling;
             for (int y = 0; y < SCREEN_HEIGHT_HALF; ++y) {
-                float wy = -1.0f; // half_view_plane * tan(fov / 2)
-                float wz = 1.0f - y / SCREEN_HEIGHT_HALF;
+                float wy = -1.0f; // half_view_plane . tan(fov / 2)
+                float wz = (1.0f - y / SCREEN_HEIGHT_HALF) * TAN_FOV_HALF;
 
                 for (int x = 0; x < SCREEN_WIDTH; ++x) {
                     if (y < occlusion_top[x] || y >= occlusion_bottom[x]) continue;
 
-                    float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO;
+                    float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO * TAN_FOV_HALF;
 
                     float rx = cam.rot_cos * wx + -cam.rot_sin * wy;
                     float ry = cam.rot_sin * wx + cam.rot_cos * wy;
@@ -137,13 +140,13 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             float scale = 2.0f * dist_to_floor;
             for (int y = 0; y < SCREEN_HEIGHT_HALF; ++y) {
                 int pixel_y = SCREEN_HEIGHT - y - 1;
-                float wy    = -1.0f; // half_view_plane * tan(fov / 2)
-                float wz    = 1.0f - y / SCREEN_HEIGHT_HALF;
+                float wy    = -1.0f;
+                float wz    = (1.0f - y / SCREEN_HEIGHT_HALF) * TAN_FOV_HALF;
 
                 for (int x = 0; x < SCREEN_WIDTH; ++x) {
                     if (pixel_y < occlusion_top[x] || pixel_y >= occlusion_bottom[x]) continue;
 
-                    float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO;
+                    float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO * TAN_FOV_HALF;
 
                     float rx = cam.rot_cos * wx + -cam.rot_sin * wy;
                     float ry = cam.rot_sin * wx + cam.rot_cos * wy;
@@ -227,8 +230,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             // Clip
             {
                 vec2 clip_planes[4][2] = {
-                    { { 0.0f, 0.0f }, { -ASPECT_RATIO * 0.5f, 1.0f } },
-                    { { ASPECT_RATIO * 0.5f, 1.0f }, { 0.0f, 0.0f } },
+                    { { 0.0f, 0.0f }, { -ASPECT_RATIO * 0.5f * TAN_FOV_HALF, 1.0f } },
+                    { { ASPECT_RATIO * 0.5f * TAN_FOV_HALF, 1.0f }, { 0.0f, 0.0f } },
                     { { 1.0f, -NEAR_PLANE }, { -1.0f, -NEAR_PLANE } },
                     { { -1.0f, -FAR_PLANE }, { 1.0f, -FAR_PLANE } },
                 };
@@ -249,7 +252,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             {
                 for (unsigned pi = 0; pi < 2; ++pi) {
                     ndc_space.points[pi][1] = -1.0f / view_space.points[pi][1];
-                    ndc_space.points[pi][0] = view_space.points[pi][0] * ndc_space.points[pi][1] * 2.0f * INV_ASPECT_RATIO;
+                    ndc_space.points[pi][0] = view_space.points[pi][0] * ndc_space.points[pi][1] * 2.0f * INV_ASPECT_RATIO * INV_TAN_FOV_HALF;
 
                     // perpective correct mapping
                     attr[pi].uv[0] *= ndc_space.points[pi][1];
@@ -267,13 +270,13 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             }
 
             float top_of_wall[2] = {
-                (0.5 - dist_to_ceiling * ndc_space.points[0][1]) * SCREEN_HEIGHT,
-                (0.5 - dist_to_ceiling * ndc_space.points[1][1]) * SCREEN_HEIGHT,
+                (0.5 - dist_to_ceiling * ndc_space.points[0][1] * INV_TAN_FOV_HALF) * SCREEN_HEIGHT,
+                (0.5 - dist_to_ceiling * ndc_space.points[1][1] * INV_TAN_FOV_HALF) * SCREEN_HEIGHT,
             };
 
             float bottom_of_wall[2] = {
-                (1.0 - (0.5 - dist_to_floor * ndc_space.points[0][1])) * SCREEN_HEIGHT,
-                (1.0 - (0.5 - dist_to_floor * ndc_space.points[1][1])) * SCREEN_HEIGHT,
+                (1.0 - (0.5 - dist_to_floor * ndc_space.points[0][1] * INV_TAN_FOV_HALF)) * SCREEN_HEIGHT,
+                (1.0 - (0.5 - dist_to_floor * ndc_space.points[1][1] * INV_TAN_FOV_HALF)) * SCREEN_HEIGHT,
             };
 
             start_x = clamp(start_x, 0, SCREEN_WIDTH);
@@ -356,13 +359,13 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                 float dist_to_nfloor   = (cam.pos[2] - pod.sectors[wall_next].floor_height);
 
                 float top_of_nwall[2] = {
-                    (0.5 - dist_to_nceiling * ndc_space.points[0][1]) * SCREEN_HEIGHT,
-                    (0.5 - dist_to_nceiling * ndc_space.points[1][1]) * SCREEN_HEIGHT,
+                    (0.5 - dist_to_nceiling * ndc_space.points[0][1] * INV_TAN_FOV_HALF) * SCREEN_HEIGHT,
+                    (0.5 - dist_to_nceiling * ndc_space.points[1][1] * INV_TAN_FOV_HALF) * SCREEN_HEIGHT,
                 };
 
                 float bottom_of_nwall[2] = {
-                    (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[0][1])) * SCREEN_HEIGHT,
-                    (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1])) * SCREEN_HEIGHT,
+                    (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[0][1] * INV_TAN_FOV_HALF)) * SCREEN_HEIGHT,
+                    (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1] * INV_TAN_FOV_HALF)) * SCREEN_HEIGHT,
                 };
 
                 for (int x = start_x; x <= end_x; ++x) {

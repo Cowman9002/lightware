@@ -14,8 +14,6 @@
 #include <stdbool.h>
 #include <assert.h>
 
-// TODO: Fix aspect ratio :')
-
 #ifdef MEMDEBUG
 void *d_malloc(size_t s) {
     void *res = malloc(s);
@@ -140,6 +138,8 @@ int main(int argc, char *argv[]) {
     cam.pos[1] = -4.0f;
     cam.pos[2] = 0.0f;
     cam.rot    = 0.0f;
+    cam.pitch = 0.0f;
+    cam.fov = 90.0f * TO_RADS;
 
     mat3 view_mat;
 
@@ -214,12 +214,17 @@ int main(int argc, char *argv[]) {
 
             float input_h = keys[SDL_SCANCODE_D] - keys[SDL_SCANCODE_A];
             float input_v = keys[SDL_SCANCODE_S] - keys[SDL_SCANCODE_W];
-            // float input_z = keys[SDL_SCANCODE_Q] - keys[SDL_SCANCODE_Z];
+            float input_fov = keys[SDL_SCANCODE_Q] - keys[SDL_SCANCODE_Z];
+            float input_p = keys[SDL_SCANCODE_UP] - keys[SDL_SCANCODE_DOWN];
             float input_r = keys[SDL_SCANCODE_RIGHT] - keys[SDL_SCANCODE_LEFT];
 
+            cam.pitch += input_p * delta;
             cam.rot += input_r * delta * 2.0f;
             cam.rot_cos = cosf(cam.rot);
             cam.rot_sin = sinf(cam.rot);
+
+            cam.fov += input_fov * delta * 0.5f;
+            cam.fov = clamp(cam.fov, 30.0f * TO_RADS, 120.0f * TO_RADS);
 
             vec2 movement = { cam.rot_cos * input_h + -cam.rot_sin * input_v, cam.rot_sin * input_h + cam.rot_cos * input_v };
 

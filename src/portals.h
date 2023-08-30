@@ -10,6 +10,8 @@ typedef struct Camera {
     vec3 pos;
     float rot;
     float rot_sin, rot_cos;
+    float fov;
+    float pitch;
 } Camera;
 
 typedef struct SectorDef {

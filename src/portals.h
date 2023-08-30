@@ -6,12 +6,13 @@
 #define INVALID_SECTOR_INDEX (~0)
 
 typedef struct Camera {
+    float fov;
     unsigned sector;
     vec3 pos;
     float rot;
     float rot_sin, rot_cos;
-    float fov;
     float pitch;
+    vec3 forward;
 } Camera;
 
 typedef struct SectorDef {

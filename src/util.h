@@ -26,6 +26,7 @@ float dist2d(vec2 a, vec2 b);
 
 float dot3d(vec3 a, vec3 b);
 float dist3d(vec3 a, vec3 b);
+float normalized3d(vec3 a, vec3 o);
 float normalize3d(vec3 a);
 
 void mat3Translate(vec2 t, mat3 out);

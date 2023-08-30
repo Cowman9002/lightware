@@ -14,8 +14,8 @@
 #include <stdbool.h>
 #include <assert.h>
 
-// TODO: "Shader" functions
 // TODO: Textures
+// TODO: reduce ceiling and floor overdraw
 // TODO: Editor
 
 #ifdef MEMDEBUG
@@ -129,8 +129,8 @@ int main(int argc, char *argv[]) {
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
 
-    bool render_depth  = false;
-    bool render_map    = false;
+    bool render_depth   = false;
+    bool render_map     = false;
     bool render_overlay = false;
 
     Image main_font;
@@ -244,6 +244,11 @@ int main(int argc, char *argv[]) {
 
             cam.fov += input_fov * delta * 0.5f;
             cam.fov = clamp(cam.fov, 30.0f * TO_RADS, 120.0f * TO_RADS);
+
+            cam.forward[0] = cam.rot_sin;
+            cam.forward[1] = -cam.rot_cos;
+            cam.forward[2] = atanf(cam.pitch);
+            normalize3d(cam.forward);
 
             vec2 movement = { cam.rot_cos * input_h + -cam.rot_sin * input_v, cam.rot_sin * input_h + cam.rot_cos * input_v };
 

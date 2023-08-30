@@ -9,6 +9,7 @@
 typedef struct WallAttribute {
     vec2 uv;
     vec3 world_pos;
+    vec3 normal;
 } WallAttribute;
 
 bool clipWall(vec2 clip_plane[2], Line *wall, WallAttribute attr[2]);
@@ -51,8 +52,31 @@ unsigned getCurrentSector(PortalWorld pod, vec2 point, unsigned last_sector) {
 
 extern uint16_t *g_depth_buffer;
 
-#define FLASHLIGHT_CUTOFF 0.99f
-#define FLASHLIGHT_OUTER_CUTOFF 0.94f
+#define FLASHLIGHT_CUTOFF 0.9f
+#define FLASHLIGHT_OUTER_CUTOFF 0.8f
+static float s_flashlight_power;
+
+bool pixelProgram(WallAttribute attr, Camera cam, Color color, Color *o_color) {
+    vec3 to_cam       = { cam.pos[0] - attr.world_pos[0], cam.pos[1] - attr.world_pos[1], cam.pos[2] - attr.world_pos[2] };
+    float to_cam_dist = sqrtf(dot3d(to_cam, to_cam));
+
+    vec3 light;
+    normalized3d(to_cam, light);
+
+    float attenuation = clamp(s_flashlight_power / to_cam_dist, 0.0f, 1.0f);
+    float ndotl       = clamp(dot3d(light, attr.normal), 0.0f, 1.0f);
+
+    float spot_theta     = -dot3d(light, cam.forward);
+    float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
+    float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
+
+    float lighting = spot_intensity * attenuation * ndotl;
+
+    int checker = (int)(floorf(attr.uv[0]) + floorf(attr.uv[1])) % 2;
+    *o_color    = checker ? color : mulColor(color, 128);
+    *o_color    = mulColor(*o_color, lighting * 255);
+    return true;
+}
 
 void renderPortalWorld(PortalWorld pod, Camera cam) {
 #define SECTOR_QUEUE_SIZE 128
@@ -60,27 +84,16 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
     const float INV_TAN_FOV_HALF = 1.0f / TAN_FOV_HALF;
 
     // TODO: TEMP
-    float FLASHLIGHT_POWER;
     {
-        FLASHLIGHT_POWER = rand() % 100;
-        if(FLASHLIGHT_POWER < 3) {
-            FLASHLIGHT_POWER = 0.0f;
-        } else if(FLASHLIGHT_POWER < 10) {
-            FLASHLIGHT_POWER = 2.0f;
+        s_flashlight_power = rand() % 100;
+        if (s_flashlight_power < 3) {
+            s_flashlight_power = 0.0f;
+        } else if (s_flashlight_power < 10) {
+            s_flashlight_power = 2.0f;
         } else {
-            FLASHLIGHT_POWER = 5.0f;
+            s_flashlight_power = 5.0f;
         }
     }
-
-    // rot_sin + rot_cos always length = 1
-    vec3 cam_forward = {
-        cam.rot_sin,
-        -cam.rot_cos,
-        atanf(cam.pitch),
-    };
-
-    normalize3d(cam_forward);
-
 
     int sector_queue[SECTOR_QUEUE_SIZE];
     unsigned sector_queue_start = 0, sector_queue_end = 0;
@@ -136,24 +149,16 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     float px = (rx * scale / wz + cam.pos[0]);
                     float py = (ry * scale / wz + cam.pos[1]);
 
-                    vec3 to_cam       = { cam.pos[0] - px, cam.pos[1] - py, cam.pos[2] - sector.ceiling_height };
-                    float to_cam_dist = sqrtf(dot3d(to_cam, to_cam));
+                    WallAttribute attr = {
+                        .uv        = { px, py },
+                        .world_pos = { px, py, sector.ceiling_height },
+                        .normal    = { 0.0f, 0.0f, -1.0f },
+                    };
+                    Color color;
 
-                    vec3 light = { to_cam[0] / to_cam_dist, to_cam[1] / to_cam_dist, to_cam[2] / to_cam_dist };
-
-                    float attenuation = clamp(FLASHLIGHT_POWER / to_cam_dist, 0.0f, 1.0f);
-                    float ndotl       = clamp(dot3d(light, VEC3(0.0f, 0.0f, -1.0f)), 0.0f, 1.0f);
-
-                    float spot_theta     = -dot3d(light, cam_forward);
-                    float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
-                    float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
-
-                    float lighting = spot_intensity * attenuation * ndotl;
-
-                    int checker = (int)(floorf(px) + floorf(py)) % 2;
-                    Color color = checker ? COLOR_RED : RGB(128, 0, 0);
-                    color       = mulColor(color, lighting * 255);
-                    setPixel(x, y, color);
+                    if (pixelProgram(attr, cam, COLOR_YELLOW, &color)) {
+                        setPixel(x, y, color);
+                    }
                 }
             }
         }
@@ -179,24 +184,16 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     float px = (rx * scale / wz + cam.pos[0]);
                     float py = (ry * scale / wz + cam.pos[1]);
 
-                    vec3 to_cam       = { cam.pos[0] - px, cam.pos[1] - py, cam.pos[2] - sector.floor_height };
-                    float to_cam_dist = sqrtf(dot3d(to_cam, to_cam));
+                    WallAttribute attr = {
+                        .uv        = { px, py },
+                        .world_pos = { px, py, sector.floor_height },
+                        .normal    = { 0.0f, 0.0f, 1.0f },
+                    };
+                    Color color;
 
-                    vec3 light = { to_cam[0] / to_cam_dist, to_cam[1] / to_cam_dist, to_cam[2] / to_cam_dist };
-
-                    float attenuation = clamp(FLASHLIGHT_POWER / to_cam_dist, 0.0f, 1.0f);
-                    float ndotl       = clamp(dot3d(light, VEC3(0.0f, 0.0f, 1.0f)), 0.0f, 1.0f);
-
-                    float spot_theta     = -dot3d(light, cam_forward);
-                    float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
-                    float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
-
-                    float lighting = spot_intensity * attenuation * ndotl;
-
-                    int checker = (int)(floorf(px) + floorf(py)) % 2;
-                    Color color = checker ? COLOR_GREEN : RGB(0, 128, 0);
-                    color       = mulColor(color, lighting * 255);
-                    setPixel(x, pixel_y, color);
+                    if (pixelProgram(attr, cam, COLOR_CYAN, &color)) {
+                        setPixel(x, pixel_y, color);
+                    }
                 }
             }
         }
@@ -307,7 +304,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             start_x = clamp(start_x, 0, SCREEN_WIDTH);
             end_x   = clamp(end_x, 0, SCREEN_WIDTH);
 
-            vec2 wall_norm;
+            vec2 wall_norm = { 0.0f, 0.0f };
             {
                 vec2 d    = { wall_line.points[1][0] - wall_line.points[0][0], wall_line.points[1][1] - wall_line.points[0][1] };
                 float len = dot2d(d, d);
@@ -358,24 +355,16 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         int depth_index             = x + y * SCREEN_WIDTH;
                         g_depth_buffer[depth_index] = depth;
 
-                        vec3 to_cam       = { cam.pos[0] - world_pos[0], cam.pos[1] - world_pos[1], cam.pos[2] - world_pos[2] };
-                        float to_cam_dist = sqrtf(dot3d(to_cam, to_cam));
+                        WallAttribute attr = {
+                            .uv        = { u, v },
+                            .world_pos = {world_pos[0], world_pos[1], world_pos[2]},
+                            .normal    = {wall_norm[0], wall_norm[1], 0.0f},
+                        };
+                        Color color;
 
-                        vec3 light = { to_cam[0] / to_cam_dist, to_cam[1] / to_cam_dist, to_cam[2] / to_cam_dist };
-
-                        float attenuation = clamp(FLASHLIGHT_POWER / to_cam_dist, 0.0f, 1.0f);
-                        float ndotl       = clamp(dot3d(light, VEC3(wall_norm[0], wall_norm[1], 0.0f)), 0.0f, 1.0f);
-
-                        float spot_theta     = -dot3d(light, cam_forward);
-                        float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
-                        float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
-
-                        float lighting = spot_intensity * attenuation * ndotl;
-
-                        int checker = (int)(floorf(u) + floorf(v)) % 2;
-                        Color color = checker ? COLOR_BLUE : RGB(0, 0, 128);
-                        color       = mulColor(color, lighting * 255);
-                        setPixel(x, y, color);
+                        if (pixelProgram(attr, cam, COLOR_RED, &color)) {
+                            setPixel(x, y, color);
+                        }
                     }
                 }
             } else {
@@ -426,8 +415,6 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     occlusion_top[x]    = max(occlusion_top[x], max(start_y, start_ny));
                     occlusion_bottom[x] = min(occlusion_bottom[x], min(end_y, end_ny));
 
-                    float attenuation = clamp(FLASHLIGHT_POWER / z, 0.0f, 1.0f);
-
                     // top step
                     for (int y = start_y; y < start_ny; ++y) {
                         float ty     = (float)(y - start_y_real) / (end_y_real - start_y_real);
@@ -437,24 +424,16 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         int depth_index             = x + y * SCREEN_WIDTH;
                         g_depth_buffer[depth_index] = depth;
 
-                        vec3 to_cam       = { cam.pos[0] - world_pos[0], cam.pos[1] - world_pos[1], cam.pos[2] - world_pos[2] };
-                        float to_cam_dist = sqrtf(dot3d(to_cam, to_cam));
+                        WallAttribute attr = {
+                            .uv        = { u, v },
+                            .world_pos = {world_pos[0], world_pos[1], world_pos[2]},
+                            .normal    = {wall_norm[0], wall_norm[1], 0.0f},
+                        };
+                        Color color;
 
-                        vec3 light = { to_cam[0] / to_cam_dist, to_cam[1] / to_cam_dist, to_cam[2] / to_cam_dist };
-
-                        float attenuation = clamp(FLASHLIGHT_POWER / to_cam_dist, 0.0f, 1.0f);
-                        float ndotl       = clamp(dot3d(light, VEC3(wall_norm[0], wall_norm[1], 0.0f)), 0.0f, 1.0f);
-
-                        float spot_theta     = -dot3d(light, cam_forward);
-                        float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
-                        float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
-
-                        float lighting = spot_intensity * attenuation * ndotl;
-
-                        int checker = (int)(floorf(u) + floorf(v)) % 2;
-                        Color color = checker ? RGB(200, 0, 255) : RGB(100, 0, 128);
-                        color       = mulColor(color, lighting * 255);
-                        setPixel(x, y, color);
+                        if (pixelProgram(attr, cam, COLOR_GREEN, &color)) {
+                            setPixel(x, y, color);
+                        }
                     }
 
                     // bottom step
@@ -467,24 +446,16 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         int depth_index             = x + y * SCREEN_WIDTH;
                         g_depth_buffer[depth_index] = depth;
 
-                        vec3 to_cam       = { cam.pos[0] - world_pos[0], cam.pos[1] - world_pos[1], cam.pos[2] - world_pos[2] };
-                        float to_cam_dist = sqrtf(dot3d(to_cam, to_cam));
+                        WallAttribute attr = {
+                            .uv        = { u, v },
+                            .world_pos = {world_pos[0], world_pos[1], world_pos[2]},
+                            .normal    = {wall_norm[0], wall_norm[1], 0.0f},
+                        };
+                        Color color;
 
-                        vec3 light = { to_cam[0] / to_cam_dist, to_cam[1] / to_cam_dist, to_cam[2] / to_cam_dist };
-
-                        float attenuation = clamp(FLASHLIGHT_POWER / to_cam_dist, 0.0f, 1.0f);
-                        float ndotl       = clamp(dot3d(light, VEC3(wall_norm[0], wall_norm[1], 0.0f)), 0.0f, 1.0f);
-
-                        float spot_theta     = -dot3d(light, cam_forward);
-                        float epsilon        = FLASHLIGHT_CUTOFF - FLASHLIGHT_OUTER_CUTOFF;
-                        float spot_intensity = clamp((spot_theta - FLASHLIGHT_OUTER_CUTOFF) / epsilon, 0.0, 1.0);
-
-                        float lighting = spot_intensity * attenuation * ndotl;
-
-                        int checker = (int)(floorf(u) + floorf(v)) % 2;
-                        Color color = checker ? RGB(0, 200, 255) : RGB(0, 100, 128);
-                        color       = mulColor(color, lighting * 255);
-                        setPixel(x, y, color);
+                        if (pixelProgram(attr, cam, COLOR_BLUE, &color)) {
+                            setPixel(x, y, color);
+                        }
                     }
                 }
             }

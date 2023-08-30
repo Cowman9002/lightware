@@ -26,6 +26,15 @@ float dist3d(vec3 a, vec3 b) {
     return sqrtf(sqr_dist);
 }
 
+float normalized3d(vec3 a, vec3 o) {
+    float len = sqrtf(dot3d(a, a));
+    if (len != 0) {
+        for (unsigned i = 0; i < 3; ++i)
+            o[i] = a[i] / len;
+    }
+    return len;
+}
+
 float normalize3d(vec3 a) {
     float len = sqrtf(dot3d(a, a));
     if (len != 0) {

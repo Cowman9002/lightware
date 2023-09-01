@@ -22,6 +22,7 @@ typedef float mat3[3 * 2]; // bottom layer is always 0, 0, 1
 
 float dot2d(vec2 a, vec2 b);
 float cross2d(vec2 a, vec2 b);
+float cross32d(vec2 a, vec2 b, vec2 c);
 float dist2d(vec2 a, vec2 b);
 
 float dot3d(vec3 a, vec3 b);

@@ -71,7 +71,6 @@ typedef struct WallDraw {
 } WallDraw;
 
 uint16_t *g_depth_buffer;
-bool *g_stencil_buffer; // TODO: Maybe bit array instead depending on speed
 
 Image g_image_array[3];
 
@@ -98,10 +97,6 @@ int main(int argc, char *argv[]) {
     uint16_t *const depth_buffer = (uint16_t *)malloc(SCREEN_HEIGHT * SCREEN_WIDTH * sizeof(*depth_buffer));
     if (depth_buffer == NULL) return -2;
     g_depth_buffer = depth_buffer;
-
-    bool *const stencil_buffer = (bool *)malloc(SCREEN_HEIGHT * SCREEN_WIDTH * sizeof(*stencil_buffer));
-    if (stencil_buffer == NULL) return -2;
-    g_stencil_buffer = stencil_buffer;
 
     const int8_t *keys      = (const int8_t *)SDL_GetKeyboardState(NULL);
     int8_t *const last_keys = (int8_t *)malloc(SDL_NUM_SCANCODES * sizeof(*last_keys));
@@ -150,6 +145,7 @@ int main(int argc, char *argv[]) {
         .sectors = (SectorDef[]){
             (SectorDef){ 0, 6, 1, (float[]){0.0f}, (float[]){10.0f} },
             (SectorDef){ 6, 4, 2, (float[]){1.0f, 1.0f}, (float[]){4.0f, 5.0f} },
+            // (SectorDef){ 6, 4, 1, (float[]){1.0f}, (float[]){5.0f} },
         },
         .num_sectors = 2,
         .wall_lines  = (Line[]){
@@ -425,7 +421,6 @@ int main(int argc, char *argv[]) {
 
 _success_exit:
     free(last_keys);
-    free(stencil_buffer);
     free(depth_buffer);
     SDL_DestroyTexture(screen_texture);
     SDL_DestroyRenderer(renderer);

@@ -31,6 +31,16 @@ bool pointInPoly(Line *lines, unsigned num_lines, vec2 point) {
     return num_intersections % 2 == 1;
 }
 
+bool pointInConvexPoly(vec2 *vertices, unsigned num_vertices, vec2 point) {
+    for(unsigned i = 1; i < num_vertices; ++i) {
+        vec2 a = {vertices[i - 1][0], vertices[i - 1][1]};
+        vec2 b = {vertices[i][0], vertices[i][1]};
+        if(cross32d(a, b, point) > 0.0f) return false;
+    }
+
+    return true;
+}
+
 bool intersectSegmentSegment(vec2 line0[2], vec2 line1[2], float *o_t) {
     float x1, x2, x3, x4;
     float y1, y2, y3, y4;

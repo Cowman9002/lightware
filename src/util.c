@@ -10,6 +10,10 @@ float cross2d(vec2 a, vec2 b) {
     return a[0] * b[1] - a[1] * b[0];
 }
 
+float cross32d(vec2 a, vec2 b, vec2 c) {
+  return (b[0] - a[0])*(c[1] - a[1]) - (b[1] - a[1])*(c[0] - a[0]);
+}
+
 float dist2d(vec2 a, vec2 b) {
     vec2 diff      = { a[0] - b[0], a[1] - b[1] };
     float sqr_dist = dot2d(diff, diff);

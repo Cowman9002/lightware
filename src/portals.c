@@ -151,7 +151,6 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
     int window_high[SCREEN_WIDTH];
     int window_low[SCREEN_WIDTH];
 
-    // TODO: Fix clipping issues when close to portal
     int tmp_window_high[SCREEN_WIDTH];
     int tmp_window_low[SCREEN_WIDTH];
 
@@ -349,8 +348,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                 (1.0 - (0.5 - dist_to_floor * ndc_space.points[1][1] * INV_TAN_FOV_HALF) + cam.pitch) * (SCREEN_HEIGHT - 1),
             };
 
-            start_x = clamp(start_x, 0, SCREEN_WIDTH);
-            end_x   = clamp(end_x, 0, SCREEN_WIDTH);
+            start_x = clamp(start_x, 0, SCREEN_WIDTH - 1);
+            end_x   = clamp(end_x, 0, SCREEN_WIDTH - 1);
 
             vec2 wall_norm = { 0.0f, 0.0f };
             {

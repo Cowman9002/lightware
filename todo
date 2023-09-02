@@ -1,0 +1,9 @@
+[ ] Convert main engine to dll
+[ ] Create level editor
+[ ] Integrated lighting
+[ ] Skybox
+[ ] 2D directional sprites
+[ ] Triangle meshes
+[ ] Voxel meshes
+
+BUG Multi-level sector clips when close to portal because secondary occlusion sets are empty when shouldn't be 

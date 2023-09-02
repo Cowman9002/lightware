@@ -20,6 +20,8 @@ typedef float mat3[3 * 2]; // bottom layer is always 0, 0, 1
 #define VEC2(x, y) ((vec2){(x), (y)})
 #define VEC3(x, y, z) ((vec3){(x), (y), (z)})
 
+#define signum(a) (((a) > 0) - ((a) < 0))
+
 float dot2d(vec2 a, vec2 b);
 float cross2d(vec2 a, vec2 b);
 float cross32d(vec2 a, vec2 b, vec2 c);

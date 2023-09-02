@@ -14,11 +14,6 @@
 #include <stdbool.h>
 #include <assert.h>
 
-// TODO: Sector over sector
-// TODO: Editor
-// TODO: Mip mapping
-// TODO: reduce ceiling and floor overdraw
-
 #ifdef MEMDEBUG
 void *d_malloc(size_t s) {
     void *res = malloc(s);

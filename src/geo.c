@@ -32,10 +32,10 @@ bool pointInPoly(Line *lines, unsigned num_lines, vec2 point) {
 }
 
 bool pointInConvexPoly(vec2 *vertices, unsigned num_vertices, vec2 point) {
-    for(unsigned i = 1; i < num_vertices; ++i) {
-        vec2 a = {vertices[i - 1][0], vertices[i - 1][1]};
-        vec2 b = {vertices[i][0], vertices[i][1]};
-        if(cross32d(a, b, point) > 0.0f) return false;
+    for (unsigned i = 1; i < num_vertices; ++i) {
+        vec2 a = { vertices[i - 1][0], vertices[i - 1][1] };
+        vec2 b = { vertices[i][0], vertices[i][1] };
+        if (cross32d(a, b, point) > 0.0f) return false;
     }
 
     return true;
@@ -55,19 +55,19 @@ bool intersectSegmentSegment(vec2 line0[2], vec2 line1[2], float *o_t) {
 
     float denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
     if (denom == 0) return false;
+    float s = signum(denom);
 
     float tn = (x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4);
     float un = (x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2);
-
-    float t = tn / denom;
-    float u = un / denom;
+    tn *= s;
+    un *= s;
+    denom *= s;
 
     // t is segment, u is ray.
-    if (t < 0.0f || t > 1.0f || u < 0.0f || u > 1.0f) return false;
+    if (tn < 0.0f || tn > denom || un < 0.0f || un > denom) return false;
 
     if (o_t != NULL) {
-        // TODO Remove division when o_t is not needed
-        *o_t = t;
+        *o_t = tn / denom;
     }
 
     return true;
@@ -85,18 +85,18 @@ bool intersectSegmentLine(vec2 line0[2], vec2 line1[2], float *o_t) {
     x4 = line1[1][0];
     y4 = line1[1][1];
 
+    float denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (denom == 0) return false;
+    float s = signum(denom);
+
     float tn = (x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4);
-    float td = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    tn *= s;
+    denom *= s;
 
-    if (td == 0) return false;
-
-    float t = tn / td;
-
-    if (t < 0 || t > 1) return false;
+    if (tn < 0 || tn > denom) return false;
 
     if (o_t != NULL) {
-        // TODO Remove division when o_t is not needed
-        *o_t = t;
+        *o_t = tn / denom;
     }
 
     return true;
@@ -116,19 +116,20 @@ bool intersectSegmentRay(vec2 line[2], vec2 ray[2], float *o_t) {
 
     float denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
     if (denom == 0) return false;
+    float s = signum(denom);
 
     float tn = (x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4);
     float un = (x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2);
 
-    float t = tn / denom;
-    float u = un / denom;
+    tn *= s;
+    un *= s;
+    denom *= s;
 
     // t is segment, u is ray.
-    if (t < 0.0f || t > 1.0f || u < 0.0f) return false;
+    if (tn < 0.0f || tn > denom || un < 0.0f) return false;
 
     if (o_t != NULL) {
-        // TODO Remove division when o_t is not needed
-        *o_t = t;
+        *o_t = tn / denom;
     }
 
     return true;

@@ -76,8 +76,9 @@ extern uint16_t *g_depth_buffer;
 static float s_flashlight_power;
 
 extern Image g_image_array[3];
+extern Image g_sky_image;
 
-bool pixelProgram(WallAttribute attr, Camera cam, unsigned texid, Color *o_color) {
+bool pixelProgram(WallAttribute attr, Camera cam, unsigned texid, int screen_x, int screen_y, Color *o_color) {
 
     float lighting = AMBIENT;
 
@@ -106,12 +107,32 @@ bool pixelProgram(WallAttribute attr, Camera cam, unsigned texid, Color *o_color
         if (u < 0) u += 1;
         if (v < 0) v += 1;
 
-        unsigned tex_x = (u * (g_image_array->width - 1));
-        unsigned tex_y = (v * (g_image_array->height - 1));
+        unsigned tex_x = (u * (img.width - 1));
+        unsigned tex_y = (v * (img.height - 1));
         *o_color       = sampleImage(img, tex_x, tex_y);
     }
 
     *o_color = mulColor(*o_color, lighting * 255);
+    return true;
+}
+
+bool skyPixelProgram(WallAttribute attr, Camera cam, unsigned texid, int screen_x, int screen_y, Color *o_color) {
+
+    const float SKY_SCALE = 1.5f;
+
+    float sky_ar = (float)g_sky_image.height / (g_sky_image.width * SKY_SCALE);
+
+    float u   = modff(screen_x / (float)SCREEN_WIDTH * sky_ar * ASPECT_RATIO + cam.rot / (2 * M_PI), NULL);
+
+    // place base on horizon line
+    float v   = (screen_y / (float)SCREEN_HEIGHT + 1.0f - cam.pitch) / SKY_SCALE;
+    // float v   = (screen_y / (float)SCREEN_HEIGHT + 1.0f - cam.pitch);
+    if (u < 0) u += 1;
+    if (v < 0) return false;
+
+    unsigned tex_x = (u * (g_sky_image.width - 1));
+    unsigned tex_y = (v * (g_sky_image.height - 1));
+    *o_color       = sampleImage(g_sky_image, tex_x, tex_y);
     return true;
 }
 
@@ -196,7 +217,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             secondary_window_y[1] != INT32_MIN &&
             secondary_window_y[2] != INT32_MIN &&
             secondary_window_y[3] != INT32_MIN) {
-            
+
             // TODO: Might not need two buffers???
             // for (int x = secondary_window_x[0]; x < secondary_window_x[1]; ++x) {
             for (int x = 0; x < SCREEN_WIDTH; ++x) {
@@ -406,7 +427,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         };
                         Color color;
 
-                        if (pixelProgram(attr, cam, 2, &color)) {
+                        if (pixelProgram(attr, cam, 2, x, y, &color)) {
+                        // if (skyPixelProgram(attr, cam, 2, x, y, &color)) {
                             setPixel(x, y, color);
                         }
                     }
@@ -453,7 +475,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         };
                         Color color;
 
-                        if (pixelProgram(attr, cam, 1, &color)) {
+                        if (pixelProgram(attr, cam, 1, x, y, &color)) {
                             setPixel(x, y, color);
                         }
                     }
@@ -508,7 +530,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         };
                         Color color;
 
-                        if (pixelProgram(attr, cam, 0, &color)) {
+                        if (pixelProgram(attr, cam, 0, x, y, &color)) {
+                        // if (skyPixelProgram(attr, cam, 0, x, y, &color)) {
                             setPixel(x, y, color);
                         }
                     }
@@ -632,7 +655,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                             };
                             Color color;
 
-                            if (pixelProgram(attr, cam, 0, &color)) {
+                            if (pixelProgram(attr, cam, 0, x, y, &color)) {
                                 setPixel(x, y, color);
                             }
                         }
@@ -653,7 +676,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                             };
                             Color color;
 
-                            if (pixelProgram(attr, cam, 0, &color)) {
+                            if (pixelProgram(attr, cam, 0, x, y, &color)) {
                                 setPixel(x, y, color);
                             }
                         }
@@ -672,7 +695,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             setPixel(x, y, COLOR_BLACK);
         }
 
-        for (unsigned y =  max(window_low[x], tmp_window_low[x]); y < min(window_high[x], tmp_window_high[x]); ++y) {
+        for (unsigned y = max(window_low[x], tmp_window_low[x]); y < min(window_high[x], tmp_window_high[x]); ++y) {
             setPixel(x, y, COLOR_WHITE);
         }
 

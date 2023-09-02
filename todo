@@ -7,3 +7,4 @@
 [ ] Voxel meshes
 
 [x] BUG Multi-level sector clips when close to portal because secondary occlusion sets are empty when shouldn't be 
+[ ] BUG Multi-level sector clips everything when on edge and looking directly at other sector

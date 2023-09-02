@@ -68,6 +68,7 @@ typedef struct WallDraw {
 uint16_t *g_depth_buffer;
 
 Image g_image_array[3];
+Image g_sky_image;
 
 int main(int argc, char *argv[]) {
 
@@ -122,6 +123,7 @@ int main(int argc, char *argv[]) {
     if(!readPng("res/textures/wall.png", &g_image_array[0])) return -1;
     if(!readPng("res/textures/floor.png", &g_image_array[1])) return -1;
     if(!readPng("res/textures/ceiling.png", &g_image_array[2])) return -1;
+    if(!readPng("res/textures/MUNSKY01.png", &g_sky_image)) return -1;
 
     char print_buffer[128];
 
@@ -405,6 +407,10 @@ int main(int argc, char *argv[]) {
             snprintf(print_buffer, sizeof(print_buffer), "FLOOR: %f", pod.sectors[cam.sector].floor_heights[cam.tier]);
             renderText(print_buffer, 1, 24 * 2+1, COLOR_BLACK, main_font, MAIN_FONT_CHAR_WIDTH);
             renderText(print_buffer, 0, 24 * 2, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
+
+            snprintf(print_buffer, sizeof(print_buffer), "PITCH: %f", cam.pitch);
+            renderText(print_buffer, 1, 24 * 3+1, COLOR_BLACK, main_font, MAIN_FONT_CHAR_WIDTH);
+            renderText(print_buffer, 0, 24 * 3, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
         }
 
         SDL_UnlockTexture(screen_texture);

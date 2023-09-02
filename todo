@@ -6,4 +6,4 @@
 [ ] Triangle meshes
 [ ] Voxel meshes
 
-BUG Multi-level sector clips when close to portal because secondary occlusion sets are empty when shouldn't be 
+[x] BUG Multi-level sector clips when close to portal because secondary occlusion sets are empty when shouldn't be 

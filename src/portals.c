@@ -196,8 +196,10 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             secondary_window_y[1] != INT32_MIN &&
             secondary_window_y[2] != INT32_MIN &&
             secondary_window_y[3] != INT32_MIN) {
-
-            for (int x = secondary_window_x[0]; x < secondary_window_x[1]; ++x) {
+            
+            // TODO: Might not need two buffers???
+            // for (int x = secondary_window_x[0]; x < secondary_window_x[1]; ++x) {
+            for (int x = 0; x < SCREEN_WIDTH; ++x) {
                 float tx = (float)(x - secondary_window_x[0]) / (secondary_window_x[1] - secondary_window_x[0]);
                 int low  = lerp(secondary_window_y[0], secondary_window_y[1], tx);
                 int high = lerp(secondary_window_y[2], secondary_window_y[3], tx);
@@ -279,36 +281,36 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 #ifndef CURRENT_SECTOR_ONLY
                 if (is_portal) {
                     if (wall_next < pod.num_sectors) {
-                        for (unsigned i = 0; i < pod.sectors[wall_next].num_tiers; ++i) {
+                        // for (unsigned i = 0; i < pod.sectors[wall_next].num_tiers; ++i) {
+                        //     sector_queue[sector_queue_end] = wall_next;
+                        //     tier_queue[sector_queue_end]   = i;
+                        //     sector_queue_end               = (sector_queue_end + 1) % 128;
+                        // }
+
+                        // TODO: Reimplement this
+                        unsigned start_tier = getSectorTier(pod, cam.pos[2], wall_next);
+                        unsigned num_tiers  = pod.sectors[wall_next].num_tiers;
+
+                        if (start_tier >= num_tiers) start_tier = 0;
+
+                        sector_queue[sector_queue_end] = wall_next;
+                        tier_queue[sector_queue_end]   = start_tier;
+                        sector_queue_end               = (sector_queue_end + 1) % 128;
+
+                        // go down
+                        for (unsigned i = start_tier; i > 0;) {
+                            --i;
                             sector_queue[sector_queue_end] = wall_next;
                             tier_queue[sector_queue_end]   = i;
                             sector_queue_end               = (sector_queue_end + 1) % 128;
                         }
 
-                        // TODO: Reimplement this
-                        // unsigned start_tier = getSectorTier(pod, cam.pos[2], wall_next);
-                        // unsigned num_tiers  = pod.sectors[wall_next].num_tiers;
-
-                        // if (start_tier >= num_tiers) start_tier = 0;
-
-                        // sector_queue[sector_queue_end] = wall_next;
-                        // tier_queue[sector_queue_end]   = start_tier;
-                        // sector_queue_end               = (sector_queue_end + 1) % 128;
-
-                        // // go down
-                        // for (unsigned i = start_tier; i > 0;) {
-                        //     --i;
-                        //     sector_queue[sector_queue_end] = wall_next;
-                        //     tier_queue[sector_queue_end]   = i;
-                        //     sector_queue_end               = (sector_queue_end + 1) % 128;
-                        // }
-
-                        // // go up
-                        // for (unsigned i = start_tier + 1; i < num_tiers; ++i) {
-                        //     sector_queue[sector_queue_end] = wall_next;
-                        //     tier_queue[sector_queue_end]   = i;
-                        //     sector_queue_end               = (sector_queue_end + 1) % 128;
-                        // }
+                        // go up
+                        for (unsigned i = start_tier + 1; i < num_tiers; ++i) {
+                            sector_queue[sector_queue_end] = wall_next;
+                            tier_queue[sector_queue_end]   = i;
+                            sector_queue_end               = (sector_queue_end + 1) % 128;
+                        }
                     }
                 }
 #endif
@@ -519,7 +521,10 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                 unsigned sector_queue_start = (sector_queue_end - nsector.num_tiers + 128) % 128;
 
-                for (unsigned ntier_index = 0; ntier_index < nsector.num_tiers; ++ntier_index) {
+                // for (unsigned ntier_index = 0; ntier_index < nsector.num_tiers; ++ntier_index) {
+                for (unsigned i = 0; i < nsector.num_tiers; ++i) {
+                    unsigned ntier_index = tier_queue[sector_queue_start + i];
+
                     float nsector_world_floor   = ntier_index == 0 ? nsector.floor_heights[ntier_index] : nsector.floor_heights[ntier_index] + nsector.ceiling_heights[0];
                     float nsector_world_ceiling = ntier_index == 0 ? nsector.ceiling_heights[ntier_index] : nsector.ceiling_heights[ntier_index] + nsector.ceiling_heights[0];
 
@@ -562,19 +567,19 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     }
 
                     if (!single_tier) {
-                        x_queue[sector_queue_start + ntier_index][0] = start_x;
-                        x_queue[sector_queue_start + ntier_index][1] = end_x;
-                        y_queue[sector_queue_start + ntier_index][0] = max(top_of_nwall[0], top_of_step[0]);
-                        y_queue[sector_queue_start + ntier_index][1] = max(top_of_nwall[1], top_of_step[1]);
-                        y_queue[sector_queue_start + ntier_index][2] = min(bottom_of_nwall[0] + 1, bottom_of_step[0] + 1);
-                        y_queue[sector_queue_start + ntier_index][3] = min(bottom_of_nwall[1] + 1, bottom_of_step[1] + 1);
+                        x_queue[sector_queue_start + i][0] = start_x;
+                        x_queue[sector_queue_start + i][1] = end_x;
+                        y_queue[sector_queue_start + i][0] = max(top_of_nwall[0], top_of_step[0]);
+                        y_queue[sector_queue_start + i][1] = max(top_of_nwall[1], top_of_step[1]);
+                        y_queue[sector_queue_start + i][2] = min(bottom_of_nwall[0] + 1, bottom_of_step[0] + 1);
+                        y_queue[sector_queue_start + i][3] = min(bottom_of_nwall[1] + 1, bottom_of_step[1] + 1);
                     } else {
-                        x_queue[sector_queue_start + ntier_index][0] = INT32_MIN;
-                        x_queue[sector_queue_start + ntier_index][1] = INT32_MIN;
-                        y_queue[sector_queue_start + ntier_index][0] = INT32_MIN;
-                        y_queue[sector_queue_start + ntier_index][1] = INT32_MIN;
-                        y_queue[sector_queue_start + ntier_index][2] = INT32_MIN;
-                        y_queue[sector_queue_start + ntier_index][3] = INT32_MIN;
+                        x_queue[sector_queue_start + i][0] = INT32_MIN;
+                        x_queue[sector_queue_start + i][1] = INT32_MIN;
+                        y_queue[sector_queue_start + i][0] = INT32_MIN;
+                        y_queue[sector_queue_start + i][1] = INT32_MIN;
+                        y_queue[sector_queue_start + i][2] = INT32_MIN;
+                        y_queue[sector_queue_start + i][3] = INT32_MIN;
                     }
 
                     for (int x = start_x; x <= end_x; ++x) {

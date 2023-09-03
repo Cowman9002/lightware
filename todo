@@ -1,4 +1,5 @@
 [ ] Convert main engine to dll
+[ ] Change over to a recursive clipping portal system
 [ ] Create level editor
 [ ] Integrated lighting
 [ ] Skybox

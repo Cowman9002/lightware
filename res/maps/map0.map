@@ -1,0 +1,23 @@
+VERSION 1
+
+SECTORS 2
+// start wall, num walls, num tiers, {floor height 0, ceiling height 0, is sky, floor_texture, ceiling_texture} ...
+0 6 1 | 0.0 10.0 1 1 0
+6 4 2 | 1.0 4.0 0 1 2 | 1.0 5.0 0 1 2
+END
+
+WALLS 0
+// x0, y0, x1, y1, next sector, is sky, texture
+// sector 1
+10.0 5.0 -10.0 5.0 0 0 0
+-10.0 5.0 -10.0 -50.0 0 0 0
+-10.0 -50.0 10.0 -50.0 0 0 0
+10.0 -50.0 10.0 -30.0 0 0 0
+10.0 -30.0 10.0 -10.0 2 0 0
+10.0 -10.0 10.0 5.0 0 0 0
+// sector 2
+10.0 -10.0 10.0 -30.0 1 0 0
+10.0 -30.0 20.0 -30.0 0 0 0
+20.0 -30.0 20.0 -10.0 0 0 0
+20.0 -10.0 10.0 -10.0 0 0 0
+END

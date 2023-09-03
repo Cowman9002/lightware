@@ -5,7 +5,10 @@
 #include <SDL2/SDL.h>
 
 #include <math.h>
+#include <malloc.h>
 #include <stdio.h>
+#include <string.h>
+#include <assert.h>
 
 // #define RENDER_OCCLUSION
 // #define CURRENT_SECTOR_ONLY
@@ -20,6 +23,242 @@ typedef struct WallAttribute {
 } WallAttribute;
 
 bool clipWall(vec2 clip_plane[2], Line *wall, WallAttribute attr[2]);
+
+#define MIN_WORLD_VERSION 1
+#define MAX_WORLD_VERSION 1
+bool loadWorld(const char *path, PortalWorld *o_world) {
+    assert(path != NULL);
+    assert(o_world != NULL);
+
+    FILE *file = fopen(path, "r");
+    if (file == NULL) {
+        printf("ERROR: Failed to open %s\n", path);
+        return false;
+    }
+    printf("Opened %s\n", path);
+
+    unsigned wall_index = 0;
+    char line[1024];
+    char *line_tmp;
+    size_t line_size = 1024;
+
+    unsigned version = 0;
+    unsigned unsigned_buff0;
+    int num_read;
+    char directive_name[64];
+
+    unsigned num_sectors_read = 0;
+    unsigned num_walls_read   = 0;
+
+    SectorDef tmp_sector;
+
+    memset(o_world, 0, sizeof(*o_world));
+
+    enum state_e {
+        state_version,
+        state_open,
+        state_sectors,
+        state_walls,
+    } state = state_version;
+
+    while (fgets(line, line_size, file) != NULL) {
+        ++wall_index;
+        num_read = sscanf(line, "%64s", directive_name);
+        if (num_read == EOF) continue;
+        if (strcmp(directive_name, "//") == 0) continue;
+
+        // printf("%s: %s", directive_name, line);
+
+        switch (state) {
+            case state_version:
+                if (strcmp(directive_name, "VERSION") == 0) {
+                    num_read = sscanf(line, "%*s %u", &version);
+                    if (num_read != 1) {
+                        printf("ERROR:%u: 'VERSION' expects one unsigned parameter\n", wall_index);
+                        return false;
+                    }
+
+                    if (version < MIN_WORLD_VERSION || version > MAX_WORLD_VERSION) {
+                        printf("ERROR:%u: Version number of %u is not supported: min %u to max %u.\n", wall_index, version, MIN_WORLD_VERSION, MAX_WORLD_VERSION);
+                        return false;
+                    }
+
+                    state = state_open;
+                } else {
+                    printf("ERROR:%u: Expected first directive to be 'VERSION'\n", wall_index);
+                    return false;
+                }
+                break;
+                ///////////////////////////////////////////////////////////////////////////////////////////////////
+            case state_open:
+                if (strcmp(directive_name, "SECTORS") == 0) {
+                    num_read = sscanf(line, "%*s %u", &unsigned_buff0);
+
+                    if (num_read != 1) {
+                        printf("ERROR:%u: 'SECTORS' expects one unsigned parameter\n", wall_index);
+                        return false;
+                    }
+
+                    o_world->num_sectors += unsigned_buff0;
+                    o_world->sectors = realloc(o_world->sectors, o_world->num_sectors * sizeof(*o_world->sectors));
+                    state            = state_sectors;
+
+                } else if (strcmp(directive_name, "WALLS") == 0) {
+                    num_read = sscanf(line, "%*s %u", &unsigned_buff0);
+
+                    if (num_read != 1) {
+                        printf("ERROR:%u: 'WALLS' expects one unsigned parameter\n", wall_index);
+                        return false;
+                    }
+
+                    o_world->num_walls += unsigned_buff0;
+                    o_world->wall_lines       = realloc(o_world->wall_lines, o_world->num_walls * sizeof(*o_world->wall_lines));
+                    o_world->wall_nexts       = realloc(o_world->wall_nexts, o_world->num_walls * sizeof(*o_world->wall_nexts));
+                    o_world->wall_is_skys     = realloc(o_world->wall_is_skys, o_world->num_walls * sizeof(*o_world->wall_is_skys));
+                    o_world->wall_texture_ids = realloc(o_world->wall_texture_ids, o_world->num_walls * sizeof(*o_world->wall_texture_ids));
+
+                    state = state_walls;
+                } else {
+                    printf("ERROR:%u: Unknown or unexpected directive: %s\n", wall_index, directive_name);
+                    return false;
+                }
+                break;
+                ///////////////////////////////////////////////////////////////////////////////////////////////////
+            case state_sectors:
+                if (strcmp(directive_name, "END") == 0) {
+                    state = state_open;
+                    break;
+                }
+                if (num_sectors_read + 1 > o_world->num_sectors) {
+                    o_world->num_sectors += 10;
+                    o_world->sectors = realloc(o_world->sectors, o_world->num_sectors * sizeof(*o_world->sectors));
+                }
+
+                num_read = sscanf(line, "%u %u %u", &tmp_sector.start, &tmp_sector.length, &tmp_sector.num_tiers);
+                if (num_read != 3) {
+                    printf("ERROR:%u: Ill-formed sector definition\n", wall_index);
+                    return false;
+                }
+
+                if (tmp_sector.num_tiers < 1) {
+                    printf("ERROR:%u: Sectors require at least one tier\n", wall_index);
+                    return false;
+                }
+
+                tmp_sector.floor_heights       = malloc(tmp_sector.num_tiers * sizeof(*tmp_sector.floor_heights));
+                tmp_sector.ceiling_heights     = malloc(tmp_sector.num_tiers * sizeof(*tmp_sector.ceiling_heights));
+                tmp_sector.is_skys             = malloc(tmp_sector.num_tiers * sizeof(*tmp_sector.is_skys));
+                tmp_sector.floor_texture_ids   = malloc(tmp_sector.num_tiers * sizeof(*tmp_sector.floor_texture_ids));
+                tmp_sector.ceiling_texture_ids = malloc(tmp_sector.num_tiers * sizeof(*tmp_sector.ceiling_texture_ids));
+
+                line_tmp = line;
+
+                for (unsigned i = 0; i < tmp_sector.num_tiers; ++i) {
+                    // skip to next tier def
+                    line_tmp = strchr(line_tmp, '|') + 1;
+
+                    num_read = sscanf(line_tmp, "%f %f %u %u %u",
+                                      &tmp_sector.floor_heights[i],
+                                      &tmp_sector.ceiling_heights[i],
+                                      &unsigned_buff0,
+                                      &tmp_sector.floor_texture_ids[i],
+                                      &tmp_sector.ceiling_texture_ids[i]);
+
+                    if (num_read != 5) {
+                        printf("ERROR:%u: Ill-formed sector tier definition\n", wall_index);
+                        return false;
+                    }
+
+                    tmp_sector.is_skys[i] = unsigned_buff0 != 0;
+                }
+
+                o_world->sectors[num_sectors_read] = tmp_sector;
+                ++num_sectors_read;
+                break;
+                ///////////////////////////////////////////////////////////////////////////////////////////////////
+            case state_walls:
+                if (strcmp(directive_name, "END") == 0) {
+                    state = state_open;
+                    break;
+                }
+                if (num_walls_read + 1 > o_world->num_walls) {
+                    o_world->num_walls += 10;
+                    o_world->wall_lines       = realloc(o_world->wall_lines, o_world->num_walls * sizeof(*o_world->wall_lines));
+                    o_world->wall_nexts       = realloc(o_world->wall_nexts, o_world->num_walls * sizeof(*o_world->wall_nexts));
+                    o_world->wall_is_skys     = realloc(o_world->wall_is_skys, o_world->num_walls * sizeof(*o_world->wall_is_skys));
+                    o_world->wall_texture_ids = realloc(o_world->wall_texture_ids, o_world->num_walls * sizeof(*o_world->wall_texture_ids));
+                }
+
+                num_read = sscanf(line, "%f %f %f %f %u %u %u",
+                                  &o_world->wall_lines[num_walls_read].points[0][0],
+                                  &o_world->wall_lines[num_walls_read].points[0][1],
+                                  &o_world->wall_lines[num_walls_read].points[1][0],
+                                  &o_world->wall_lines[num_walls_read].points[1][1],
+                                  &o_world->wall_nexts[num_walls_read],
+                                  &unsigned_buff0,
+                                  &o_world->wall_texture_ids[num_walls_read]);
+
+                if (num_read != 7) {
+                    printf("ERROR:%u: Ill-formed wall definition\n", wall_index);
+                    return false;
+                }
+
+                o_world->wall_is_skys[num_walls_read] = unsigned_buff0 != 0;
+
+                if (o_world->wall_nexts[num_walls_read] == 0) {
+                    o_world->wall_nexts[num_walls_read] = INVALID_SECTOR_INDEX;
+                } else {
+                    o_world->wall_nexts[num_walls_read] -= 1;
+                }
+
+                ++num_walls_read;
+                break;
+                ///////////////////////////////////////////////////////////////////////////////////////////////////
+            default:
+                assert(false && "Unhandled state!");
+        }
+    }
+
+    fclose(file);
+
+    o_world->num_sectors = num_sectors_read;
+    o_world->num_walls   = num_walls_read;
+
+    // printf("PARSED\n");
+    // printf("VERSION: %u\n", version);
+    // printf("SECTORS: %u\n", o_world->num_sectors);
+    // for (unsigned i = 0; i < o_world->num_sectors; ++i) {
+    //     SectorDef sector = o_world->sectors[i];
+    //     printf("start: %u length: %u tiers: %u ", sector.start, sector.length, sector.num_tiers);
+    //     for (unsigned j = 0; j < sector.num_tiers; ++j) {
+    //         printf("floor height: %f ceiling height: %f ", sector.floor_heights[j], sector.ceiling_heights[j]);
+    //     }
+    //     printf("\n");
+    // }
+
+    // printf("WALLS: %u\n", o_world->num_walls);
+    // for (unsigned i = 0; i < o_world->num_walls; ++i) {
+    //     Line line = o_world->wall_lines[i];
+    //     printf("(%f, %f) (%f, %f) %u\n", line.points[0][0], line.points[0][1], line.points[1][0], line.points[1][1], o_world->wall_nexts[i]);
+    // }
+
+    return true;
+}
+
+void freeWorld(PortalWorld world) {
+    free(world.wall_lines);
+    free(world.wall_nexts);
+    free(world.wall_is_skys);
+    free(world.wall_texture_ids);
+
+    for(unsigned i = 0; i < world.num_sectors; ++i) {
+        free(world.sectors[i].floor_heights);
+        free(world.sectors[i].ceiling_heights);
+        free(world.sectors[i].is_skys);
+        free(world.sectors[i].floor_texture_ids);
+        free(world.sectors[i].ceiling_texture_ids);
+    }
+}
 
 unsigned getCurrentSector(PortalWorld pod, vec2 point, unsigned last_sector) {
     if (last_sector < pod.num_sectors) {
@@ -76,7 +315,7 @@ extern uint16_t *g_depth_buffer;
 static float s_flashlight_power;
 
 extern Image g_image_array[3];
-extern Image g_sky_image;
+extern Image g_sky_image_array[1];
 
 bool pixelProgram(WallAttribute attr, Camera cam, unsigned texid, int screen_x, int screen_y, Color *o_color) {
 
@@ -117,22 +356,22 @@ bool pixelProgram(WallAttribute attr, Camera cam, unsigned texid, int screen_x, 
 }
 
 bool skyPixelProgram(WallAttribute attr, Camera cam, unsigned texid, int screen_x, int screen_y, Color *o_color) {
-
     const float SKY_SCALE = 1.5f;
+    Image img             = g_sky_image_array[texid];
 
-    float sky_ar = (float)g_sky_image.height / (g_sky_image.width * SKY_SCALE);
+    float sky_ar = (float)img.height / (img.width * SKY_SCALE);
 
-    float u   = modff(screen_x / (float)SCREEN_WIDTH * sky_ar * ASPECT_RATIO + cam.rot / (2 * M_PI), NULL);
+    float u = modff(screen_x / (float)SCREEN_WIDTH * sky_ar * ASPECT_RATIO + cam.rot / (2 * M_PI), NULL);
 
     // place base on horizon line
-    float v   = (screen_y / (float)SCREEN_HEIGHT + 1.0f - cam.pitch) / SKY_SCALE;
+    float v = (screen_y / (float)SCREEN_HEIGHT + 1.0f - cam.pitch) / SKY_SCALE;
     // float v   = (screen_y / (float)SCREEN_HEIGHT + 1.0f - cam.pitch);
     if (u < 0) u += 1;
     if (v < 0) return false;
 
-    unsigned tex_x = (u * (g_sky_image.width - 1));
-    unsigned tex_y = (v * (g_sky_image.height - 1));
-    *o_color       = sampleImage(g_sky_image, tex_x, tex_y);
+    unsigned tex_x = (u * (img.width - 1));
+    unsigned tex_y = (v * (img.height - 1));
+    *o_color       = sampleImage(img, tex_x, tex_y);
     return true;
 }
 
@@ -238,9 +477,12 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
         // render every wall
         for (unsigned i = 0; i < sector.length; ++i) {
-            Line wall_line     = pod.wall_lines[sector.start + i];
-            unsigned wall_next = pod.wall_nexts[sector.start + i];
-            bool is_portal     = wall_next != INVALID_SECTOR_INDEX && wall_next != sector_index;
+            Line wall_line      = pod.wall_lines[sector.start + i];
+            unsigned wall_next  = pod.wall_nexts[sector.start + i];
+            bool wall_is_sky    = pod.wall_is_skys[sector.start + i];
+            unsigned wall_texid = pod.wall_texture_ids[sector.start + i];
+
+            bool is_portal = wall_next != INVALID_SECTOR_INDEX && wall_next != sector_index;
 
             // Back face culling
             {
@@ -302,13 +544,6 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 #ifndef CURRENT_SECTOR_ONLY
                 if (is_portal) {
                     if (wall_next < pod.num_sectors) {
-                        // for (unsigned i = 0; i < pod.sectors[wall_next].num_tiers; ++i) {
-                        //     sector_queue[sector_queue_end] = wall_next;
-                        //     tier_queue[sector_queue_end]   = i;
-                        //     sector_queue_end               = (sector_queue_end + 1) % 128;
-                        // }
-
-                        // TODO: Reimplement this
                         unsigned start_tier = getSectorTier(pod, cam.pos[2], wall_next);
                         unsigned num_tiers  = pod.sectors[wall_next].num_tiers;
 
@@ -395,7 +630,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                 int ceiling_top = max(top_of_wall[0], top_of_wall[1]);
 
                 float scale = 2.0f * dist_to_ceiling;
-                int horizon = (0.5 + cam.pitch) * SCREEN_HEIGHT;
+                // int horizon = (0.5 + cam.pitch) * SCREEN_HEIGHT;
                 for (int y = 0; y < ceiling_top; ++y) {
                     float wy = -1.0f; // half_view_plane . tan(fov / 2)
                     float wz = (1.0f - (y - cam.pitch * SCREEN_HEIGHT) / SCREEN_HEIGHT_HALF) * TAN_FOV_HALF;
@@ -427,8 +662,15 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         };
                         Color color;
 
-                        if (pixelProgram(attr, cam, 2, x, y, &color)) {
-                        // if (skyPixelProgram(attr, cam, 2, x, y, &color)) {
+                        bool draw;
+                        unsigned ti = sector.ceiling_texture_ids[tier_index];
+                        if (sector.is_skys[tier_index]) {
+                            draw = skyPixelProgram(attr, cam, ti, x, y, &color);
+                        } else {
+                            draw = pixelProgram(attr, cam, ti, x, y, &color);
+                        }
+
+                        if (draw) {
                             setPixel(x, y, color);
                         }
                     }
@@ -442,7 +684,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                 int floor_top = min(bottom_of_wall[0], bottom_of_wall[1]);
 
                 float scale = 2.0f * dist_to_floor;
-                int horizon = (0.5 + cam.pitch) * SCREEN_HEIGHT;
+                // int horizon = (0.5 + cam.pitch) * SCREEN_HEIGHT;
 
                 for (int y = SCREEN_HEIGHT - 1; y >= floor_top; --y) {
                     float wy = -1.0f;
@@ -475,7 +717,11 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         };
                         Color color;
 
-                        if (pixelProgram(attr, cam, 1, x, y, &color)) {
+                        bool draw;
+                        unsigned ti = sector.floor_texture_ids[tier_index];
+                        draw        = pixelProgram(attr, cam, ti, x, y, &color);
+
+                        if (draw) {
                             setPixel(x, y, color);
                         }
                     }
@@ -530,8 +776,14 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         };
                         Color color;
 
-                        if (pixelProgram(attr, cam, 0, x, y, &color)) {
-                        // if (skyPixelProgram(attr, cam, 0, x, y, &color)) {
+                        bool draw;
+                        if (wall_is_sky) {
+                            draw = skyPixelProgram(attr, cam, wall_texid, x, y, &color);
+                        } else {
+                            draw = pixelProgram(attr, cam, wall_texid, x, y, &color);
+                        }
+
+                        if (draw) {
                             setPixel(x, y, color);
                         }
                     }
@@ -625,8 +877,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                             0.0f,
                         };
 
-                        int start_y_real = start_y;
-                        int end_y_real   = end_y;
+                        int start_y_real = lerp(top_of_wall[0], top_of_wall[1], tx);
+                        int end_y_real   = lerp(bottom_of_wall[0], bottom_of_wall[1], tx);
 
                         start_y = clamp(start_y, max(window_low[x], tmp_window_low[x]), min(window_high[x], tmp_window_high[x]));
                         end_y   = clamp(end_y, max(window_low[x], tmp_window_low[x]), min(window_high[x], tmp_window_high[x]));
@@ -644,9 +896,11 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                             int depth_index = x + y * SCREEN_WIDTH;
 
                             g_depth_buffer[depth_index] = depth;
-                            float ty                    = (float)(y - start_y_real) / (end_y_real - start_y_real);
-                            float v                     = lerp(attr[1].uv[1], attr[0].uv[1], ty);
-                            world_pos[2]                = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
+
+                            float ty = (float)(y - start_y_real) / (end_y_real - start_y_real);
+
+                            float v      = lerp(attr[1].uv[1], attr[0].uv[1], ty);
+                            world_pos[2] = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
 
                             WallAttribute attr = {
                                 .uv        = { u, v },
@@ -655,7 +909,14 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                             };
                             Color color;
 
-                            if (pixelProgram(attr, cam, 0, x, y, &color)) {
+                            bool draw;
+                            if (wall_is_sky) {
+                                draw = skyPixelProgram(attr, cam, wall_texid, x, y, &color);
+                            } else {
+                                draw = pixelProgram(attr, cam, wall_texid, x, y, &color);
+                            }
+
+                            if (draw) {
                                 setPixel(x, y, color);
                             }
                         }
@@ -676,7 +937,14 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                             };
                             Color color;
 
-                            if (pixelProgram(attr, cam, 0, x, y, &color)) {
+                            bool draw;
+                            if (wall_is_sky) {
+                                draw = skyPixelProgram(attr, cam, wall_texid, x, y, &color);
+                            } else {
+                                draw = pixelProgram(attr, cam, wall_texid, x, y, &color);
+                            }
+
+                            if (draw) {
                                 setPixel(x, y, color);
                             }
                         }

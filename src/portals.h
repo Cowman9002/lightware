@@ -20,11 +20,15 @@ typedef struct SectorDef {
     unsigned start, length;
     unsigned num_tiers;
     float *floor_heights, *ceiling_heights; // first is world space, next are relative to last ceiling
+    bool *is_skys;
+    unsigned *floor_texture_ids, *ceiling_texture_ids;
 } SectorDef;
 
 typedef struct PortalWorld {
     Line *wall_lines;
     unsigned *wall_nexts;
+    bool *wall_is_skys;
+    unsigned *wall_texture_ids;
 
     SectorDef *sectors;
 
@@ -32,6 +36,8 @@ typedef struct PortalWorld {
     unsigned num_sectors;
 } PortalWorld;
 
+bool loadWorld(const char *path, PortalWorld *o_world);
+void freeWorld(PortalWorld world);
 
 unsigned getCurrentSector(PortalWorld pod, vec2 point, unsigned last_sector);
 unsigned getSectorTier(PortalWorld pod, float z, unsigned sector_id);

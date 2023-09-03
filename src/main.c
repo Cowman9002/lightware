@@ -68,7 +68,7 @@ typedef struct WallDraw {
 uint16_t *g_depth_buffer;
 
 Image g_image_array[3];
-Image g_sky_image;
+Image g_sky_image_array[1];
 
 int main(int argc, char *argv[]) {
 
@@ -123,7 +123,7 @@ int main(int argc, char *argv[]) {
     if(!readPng("res/textures/wall.png", &g_image_array[0])) return -1;
     if(!readPng("res/textures/floor.png", &g_image_array[1])) return -1;
     if(!readPng("res/textures/ceiling.png", &g_image_array[2])) return -1;
-    if(!readPng("res/textures/MUNSKY01.png", &g_sky_image)) return -1;
+    if(!readPng("res/textures/MUNSKY01.png", &g_sky_image_array[0])) return -1;
 
     char print_buffer[128];
 
@@ -138,43 +138,8 @@ int main(int argc, char *argv[]) {
 
     mat3 view_mat;
 
-    PortalWorld pod = {
-        .sectors = (SectorDef[]){
-            (SectorDef){ 0, 6, 1, (float[]){0.0f}, (float[]){10.0f} },
-            (SectorDef){ 6, 4, 2, (float[]){1.0f, 1.0f}, (float[]){4.0f, 5.0f} },
-            // (SectorDef){ 6, 4, 1, (float[]){1.0f}, (float[]){5.0f} },
-        },
-        .num_sectors = 2,
-        .wall_lines  = (Line[]){
-            // sector 1
-            { { { 10.0f, 5.0f }, { -10.0f, 5.0f } } },
-            { { { -10.0f, 5.0f }, { -10.0f, -50.0f } } },
-            { { { -10.0f, -50.0f }, { 10.0f, -50.0f } } },
-            { { { 10.0f, -50.0f }, { 10.0f, -30.0f } } },
-            { { { 10.0f, -30.0f }, { 10.0f, -10.0f } } },
-            { { { 10.0f, -10.0f }, { 10.0f, 5.0f } } },
-            // sector 1
-            { { { 10.0f, -10.0f }, { 10.0f, -30.0f } } },
-            { { { 10.0f, -30.0f }, { 20.0f, -30.0f } } },
-            { { { 20.0f, -30.0f }, { 20.0f, -10.0f } } },
-            { { { 20.0f, -10.0f }, { 10.0f, -10.0f } } },
-        },
-        .wall_nexts = (unsigned[]){
-            // sector 1
-            INVALID_SECTOR_INDEX,
-            INVALID_SECTOR_INDEX,
-            INVALID_SECTOR_INDEX,
-            INVALID_SECTOR_INDEX,
-            1,
-            INVALID_SECTOR_INDEX,
-            // sector 2
-            0,
-            INVALID_SECTOR_INDEX,
-            INVALID_SECTOR_INDEX,
-            INVALID_SECTOR_INDEX,
-        },
-        .num_walls = 10,
-    };
+    PortalWorld pod;
+    if(!loadWorld("res/maps/map0.map", &pod)) return -3;
 
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
@@ -202,6 +167,17 @@ int main(int argc, char *argv[]) {
         }
 
         {
+            if (keys[SDL_SCANCODE_L] && !last_keys[SDL_SCANCODE_L]) {
+                PortalWorld pod2;
+                if(loadWorld("res/maps/map0.map", &pod2)) {
+                    freeWorld(pod);
+                    pod = pod2;
+                    printf("Reloaded world\n");
+                } else {
+                    printf("Failed to reload world\n");
+                }
+            }
+
             if (keys[SDL_SCANCODE_P] && !last_keys[SDL_SCANCODE_P]) {
                 render_depth = !render_depth;
             }
@@ -421,6 +397,8 @@ int main(int argc, char *argv[]) {
     }
 
 _success_exit:
+    freeWorld(pod);
+
     free(last_keys);
     free(depth_buffer);
     SDL_DestroyTexture(screen_texture);

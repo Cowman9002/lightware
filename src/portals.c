@@ -26,7 +26,7 @@ bool clipWall(vec2 clip_plane[2], Line *wall, WallAttribute attr[2]);
 
 #define MIN_WORLD_VERSION 1
 #define MAX_WORLD_VERSION 1
-bool loadWorld(const char *path, PortalWorld *o_world) {
+bool loadWorld(const char *path, PortalWorld *o_world, float scale) {
     assert(path != NULL);
     assert(o_world != NULL);
 
@@ -211,6 +211,11 @@ bool loadWorld(const char *path, PortalWorld *o_world) {
                     o_world->wall_nexts[num_walls_read] -= 1;
                 }
 
+                o_world->wall_lines[num_walls_read].points[0][0] *= scale;
+                o_world->wall_lines[num_walls_read].points[0][1] *= scale;
+                o_world->wall_lines[num_walls_read].points[1][0] *= scale;
+                o_world->wall_lines[num_walls_read].points[1][1] *= scale;
+
                 ++num_walls_read;
                 break;
                 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -299,8 +304,8 @@ unsigned getCurrentSector(PortalWorld pod, vec2 point, unsigned last_sector) {
 unsigned getSectorTier(PortalWorld pod, float z, unsigned sector_id) {
     SectorDef sector = pod.sectors[sector_id];
     for (unsigned i = 0; i < sector.num_tiers; ++i) {
-        float sector_world_floor   = i == 0 ? sector.floor_heights[i] : sector.floor_heights[i] + sector.ceiling_heights[0];
-        float sector_world_ceiling = i == 0 ? sector.ceiling_heights[i] : sector.ceiling_heights[i] + sector.ceiling_heights[0];
+        float sector_world_floor   = sector.floor_heights[i];
+        float sector_world_ceiling = sector.ceiling_heights[i];
 
         if (z >= sector_world_floor && z <= sector_world_ceiling) return i;
     }
@@ -443,8 +448,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
         SectorDef sector = pod.sectors[sector_index];
         if (tier_index >= sector.num_tiers) continue; // avoid invalid tiers
 
-        float sector_world_floor   = tier_index == 0 ? sector.floor_heights[tier_index] : sector.floor_heights[tier_index] + sector.ceiling_heights[0];
-        float sector_world_ceiling = tier_index == 0 ? sector.ceiling_heights[tier_index] : sector.ceiling_heights[tier_index] + sector.ceiling_heights[0];
+        float sector_world_floor   = sector.floor_heights[tier_index];
+        float sector_world_ceiling = sector.ceiling_heights[tier_index];
 
         float dist_to_floor   = (cam.pos[2] - sector_world_floor);
         float dist_to_ceiling = (sector_world_ceiling - cam.pos[2]);
@@ -800,8 +805,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                 for (unsigned i = 0; i < nsector.num_tiers; ++i) {
                     unsigned ntier_index = tier_queue[sector_queue_start + i];
 
-                    float nsector_world_floor   = ntier_index == 0 ? nsector.floor_heights[ntier_index] : nsector.floor_heights[ntier_index] + nsector.ceiling_heights[0];
-                    float nsector_world_ceiling = ntier_index == 0 ? nsector.ceiling_heights[ntier_index] : nsector.ceiling_heights[ntier_index] + nsector.ceiling_heights[0];
+                    float nsector_world_floor   = nsector.floor_heights[ntier_index];
+                    float nsector_world_ceiling = nsector.ceiling_heights[ntier_index];
 
                     float dist_to_nfloor   = (cam.pos[2] - nsector_world_floor);
                     float dist_to_nceiling = (nsector_world_ceiling - cam.pos[2]);
@@ -825,7 +830,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         top_of_step[1] = top_of_wall[1];
                     } else {
                         // need to use the floor of above tier
-                        float nsector_world_floor = ntier_index + 1 == 0 ? nsector.floor_heights[ntier_index + 1] : nsector.floor_heights[ntier_index + 1] + nsector.ceiling_heights[0];
+                        float nsector_world_floor = nsector.floor_heights[ntier_index + 1];
                         float dist_to_nfloor      = (cam.pos[2] - nsector_world_floor);
                         top_of_step[0]            = (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[0][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT;
                         top_of_step[1]            = (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT;

@@ -14,6 +14,8 @@
 #include <stdbool.h>
 #include <assert.h>
 
+#define WORLD_SCALE 5.0f
+
 #ifdef MEMDEBUG
 void *d_malloc(size_t s) {
     void *res = malloc(s);
@@ -139,7 +141,7 @@ int main(int argc, char *argv[]) {
     mat3 view_mat;
 
     PortalWorld pod;
-    if(!loadWorld("res/maps/map0.map", &pod)) return -3;
+    if(!loadWorld("res/maps/map0.map", &pod, WORLD_SCALE)) return -3;
 
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
@@ -169,7 +171,7 @@ int main(int argc, char *argv[]) {
         {
             if (keys[SDL_SCANCODE_L] && !last_keys[SDL_SCANCODE_L]) {
                 PortalWorld pod2;
-                if(loadWorld("res/maps/map0.map", &pod2)) {
+                if(loadWorld("res/maps/map0.map", &pod2, WORLD_SCALE)) {
                     freeWorld(pod);
                     pod = pod2;
                     printf("Reloaded world\n");

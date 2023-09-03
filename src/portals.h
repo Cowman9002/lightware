@@ -36,7 +36,7 @@ typedef struct PortalWorld {
     unsigned num_sectors;
 } PortalWorld;
 
-bool loadWorld(const char *path, PortalWorld *o_world);
+bool loadWorld(const char *path, PortalWorld *o_world, float scale);
 void freeWorld(PortalWorld world);
 
 unsigned getCurrentSector(PortalWorld pod, vec2 point, unsigned last_sector);

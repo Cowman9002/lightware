@@ -20,6 +20,11 @@ void setPixelI(unsigned i, Color color) {
     g_pixels[i] = color;
 }
 
+Color getPixel(unsigned x, unsigned y) {
+    if (x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT) return (Color){};
+    return g_pixels[x + y * SCREEN_WIDTH];
+}
+
 // https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
 
 void _plotLineHigh(int x0, int y0, int x1, int y1, Color color);

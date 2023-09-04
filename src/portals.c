@@ -10,7 +10,6 @@
 #include <string.h>
 #include <assert.h>
 
-// #define RENDER_OCCLUSION
 // #define CURRENT_SECTOR_ONLY
 // #define NO_CEILINGS
 // #define NO_FLOORS
@@ -256,7 +255,7 @@ void freeWorld(PortalWorld world) {
     free(world.wall_is_skys);
     free(world.wall_texture_ids);
 
-    for(unsigned i = 0; i < world.num_sectors; ++i) {
+    for (unsigned i = 0; i < world.num_sectors; ++i) {
         free(world.sectors[i].floor_heights);
         free(world.sectors[i].ceiling_heights);
         free(world.sectors[i].is_skys);
@@ -322,6 +321,8 @@ static float s_flashlight_power;
 extern Image g_image_array[3];
 extern Image g_sky_image_array[1];
 
+extern bool g_render_occlusion;
+
 bool pixelProgram(WallAttribute attr, Camera cam, unsigned texid, int screen_x, int screen_y, Color *o_color) {
 
     float lighting = AMBIENT;
@@ -380,6 +381,114 @@ bool skyPixelProgram(WallAttribute attr, Camera cam, unsigned texid, int screen_
     return true;
 }
 
+typedef struct TrapezoidPortal {
+    int min_x, max_x;
+    int low_y[2];
+    int high_y[2];
+} TrapezoidPortal;
+
+bool clipTrapPortal(TrapezoidPortal base, TrapezoidPortal *test) {
+    assert(test != NULL);
+
+    // check if outside x range
+    if (test->max_x < base.min_x || base.max_x < test->min_x) return false;
+
+    float base_inv_range = 1.0f / (base.max_x - base.min_x);
+
+    // zero to one range indicating how far along base test.min_x is
+    float test_min_x_u = (test->min_x - base.min_x) * base_inv_range;
+    // zero to one range indicating how far along base test.max_x is
+    float test_max_x_u = (test->max_x - base.min_x) * base_inv_range;
+
+    int base_low_at_test[2] = {
+        max(lerp(base.low_y[0], base.low_y[1], test_min_x_u), base.low_y[0]),
+        max(lerp(base.low_y[0], base.low_y[1], test_max_x_u), base.low_y[1])
+    };
+    int base_high_at_test[2] = {
+        min(lerp(base.high_y[0], base.high_y[1], test_min_x_u), base.high_y[0]),
+        min(lerp(base.high_y[0], base.high_y[1], test_max_x_u), base.high_y[1])
+    };
+
+    // check if outside y range
+    if (test->high_y[0] < base_low_at_test[0] && test->high_y[1] < base_low_at_test[1]) return false;
+    if (base_high_at_test[0] < test->low_y[0] && base_high_at_test[1] < test->low_y[1]) return false;
+
+    // now for the fun part.
+
+    float test_inv_range = 1.0f / (test->max_x - test->min_x);
+    // zero to one range indicating how far along test base.min_x is
+    float base_min_x_u = (base.min_x - test->min_x) * test_inv_range;
+    // zero to one range indicating how far along test base.max_x is
+    float base_max_x_u = (base.max_x - test->min_x) * test_inv_range;
+
+    // precalc intersection points
+    int test_low_at_base[2]  = { lerp(test->low_y[0], test->low_y[1], base_min_x_u), lerp(test->low_y[0], test->low_y[1], base_max_x_u) };
+    int test_high_at_base[2] = { lerp(test->high_y[0], test->high_y[1], base_min_x_u), lerp(test->high_y[0], test->high_y[1], base_max_x_u) };
+
+    // each corner needs to be clipped to fit inside the base trapezoid.
+    // assuming that the points are in the correct order along with the above clipping, we should only need to check the corresponding sides
+    // the top left vertex of test should only need to be checked against the top, and the left side of base.
+
+    // if the point is outside both, simply set the point to the corresponding vertex on base. This will also lose some accuracy, but it's fine
+    // if the point is outside the y point but not the x point, simply move the y down to meet. This is not correct, but only ever loses space, so only minor artifacts are visible
+    // if the point is outside the x point but not the y point, set test's x to base's x and set test's y to the intersected y point
+    // if the point is inside both corresponding sides, no clipping needed
+
+    // precalc outside
+    bool outside_min = test->min_x < base.min_x;
+    bool outside_max = test->max_x > base.max_x;
+
+    bool outside_low[2]  = { test->low_y[0] < base_low_at_test[0], test->low_y[1] < base_low_at_test[1] };
+    bool outside_high[2] = { test->high_y[0] > base_high_at_test[0], test->high_y[1] > base_high_at_test[1] };
+
+    // top left vertex
+    if (outside_min && outside_low[0]) {
+        test->min_x    = base.min_x;
+        test->low_y[0] = base.low_y[0];
+    } else if (!outside_min && outside_low[0]) {
+        test->low_y[0] = base.low_y[0];
+    } else if (outside_min && !outside_low[0]) {
+        test->min_x    = base.min_x;
+        test->low_y[0] = test_low_at_base[0];
+    }
+
+    // top right vertex
+    if (outside_max && outside_low[1]) {
+        test->max_x    = base.max_x;
+        test->low_y[1] = base.low_y[1];
+    } else if (!outside_max && outside_low[1]) {
+        test->low_y[1] = base.low_y[1];
+    } else if (outside_max && !outside_low[1]) {
+        test->max_x    = base.max_x;
+        test->low_y[1] = test_low_at_base[1];
+    }
+
+    // bottom left vertex
+    if (outside_min && outside_high[0]) {
+        test->min_x     = base.min_x;
+        test->high_y[0] = base.high_y[0];
+    } else if (!outside_min && outside_high[0]) {
+        test->high_y[0] = base.high_y[0];
+    } else if (outside_min && !outside_high[0]) {
+        test->min_x     = base.min_x;
+        test->high_y[0] = test_high_at_base[0];
+    }
+
+    // bottom right vertex
+    if (outside_max && outside_high[1]) {
+        test->max_x     = base.max_x;
+        test->high_y[1] = base.high_y[1];
+    } else if (!outside_max && outside_high[1]) {
+        test->high_y[1] = base.high_y[1];
+    } else if (outside_max && !outside_high[1]) {
+        test->max_x     = base.max_x;
+        test->high_y[1] = test_high_at_base[1];
+    }
+
+    return true;
+}
+
+
 void renderPortalWorld(PortalWorld pod, Camera cam) {
 #define SECTOR_QUEUE_SIZE 128
     const float TAN_FOV_HALF     = tanf(cam.fov * 0.5f);
@@ -400,8 +509,10 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
     unsigned sector_queue_start = 0, sector_queue_end = 0;
     unsigned sector_queue[SECTOR_QUEUE_SIZE];
     unsigned tier_queue[SECTOR_QUEUE_SIZE];
-    int x_queue[SECTOR_QUEUE_SIZE][2] = { { INT32_MIN, INT32_MIN } };
-    int y_queue[SECTOR_QUEUE_SIZE][4] = { { INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN } };
+
+    TrapezoidPortal portal_queue[SECTOR_QUEUE_SIZE] = {
+        { .min_x = 0, .max_x = SCREEN_WIDTH, .low_y = { 0, 0 }, .high_y = { SCREEN_HEIGHT, SCREEN_HEIGHT } }
+    };
 
     if (cam.sector < pod.num_sectors) {
         sector_queue[sector_queue_end] = cam.sector;
@@ -416,16 +527,6 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
     int window_high[SCREEN_WIDTH];
     int window_low[SCREEN_WIDTH];
 
-    int tmp_window_high[SCREEN_WIDTH];
-    int tmp_window_low[SCREEN_WIDTH];
-
-    for (unsigned i = 0; i < SCREEN_WIDTH; ++i) {
-        window_high[i]     = SCREEN_HEIGHT;
-        window_low[i]      = 0;
-        tmp_window_high[i] = SCREEN_HEIGHT;
-        tmp_window_low[i]  = 0;
-    }
-
     // loop variables
     Line view_tspace;
     Line view_space;
@@ -436,11 +537,9 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
     // bredth first traversal of sectors
     while (sector_queue_start != sector_queue_end) {
         // pop
-        unsigned sector_index = sector_queue[sector_queue_start];
-        unsigned tier_index   = tier_queue[sector_queue_start];
-
-        int secondary_window_x[2] = { x_queue[sector_queue_start][0], x_queue[sector_queue_start][1] };
-        int secondary_window_y[4] = { y_queue[sector_queue_start][0], y_queue[sector_queue_start][1], y_queue[sector_queue_start][2], y_queue[sector_queue_start][3] };
+        unsigned sector_index  = sector_queue[sector_queue_start];
+        unsigned tier_index    = tier_queue[sector_queue_start];
+        TrapezoidPortal portal = portal_queue[sector_queue_start];
 
         sector_queue_start = (sector_queue_start + 1) % SECTOR_QUEUE_SIZE;
 
@@ -454,29 +553,26 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
         float dist_to_floor   = (cam.pos[2] - sector_world_floor);
         float dist_to_ceiling = (sector_world_ceiling - cam.pos[2]);
 
-        // calculate the secondary occlusion buffer
-        if (secondary_window_x[0] != INT32_MIN &&
-            secondary_window_x[1] != INT32_MIN &&
-            secondary_window_y[0] != INT32_MIN &&
-            secondary_window_y[1] != INT32_MIN &&
-            secondary_window_y[2] != INT32_MIN &&
-            secondary_window_y[3] != INT32_MIN) {
-
-            // TODO: Might not need two buffers???
-            // for (int x = secondary_window_x[0]; x < secondary_window_x[1]; ++x) {
-            for (int x = 0; x < SCREEN_WIDTH; ++x) {
-                float tx = (float)(x - secondary_window_x[0]) / (secondary_window_x[1] - secondary_window_x[0]);
-                int low  = lerp(secondary_window_y[0], secondary_window_y[1], tx);
-                int high = lerp(secondary_window_y[2], secondary_window_y[3], tx);
-
-                tmp_window_low[x]  = clamp(low, 0, SCREEN_HEIGHT);
-                tmp_window_high[x] = clamp(high, 0, SCREEN_HEIGHT);
+        // calculate occlusion buffer
+        {
+            for (int x = 0; x < portal.min_x; ++x) {
+                window_low[x]  = 0;
+                window_high[x] = 0;
             }
-        } else {
-            // clear
-            for (unsigned i = 0; i < SCREEN_WIDTH; ++i) {
-                tmp_window_high[i] = SCREEN_HEIGHT;
-                tmp_window_low[i]  = 0;
+
+            for (int x = portal.max_x; x < SCREEN_WIDTH; ++x) {
+                window_low[x]  = 0;
+                window_high[x] = 0;
+            }
+
+            float inv_range = 1.0f / (portal.max_x - portal.min_x);
+            for (int x = portal.min_x; x < portal.max_x; ++x) {
+                float tx = (float)(x - portal.min_x) * inv_range;
+                int low  = lerp(portal.low_y[0], portal.low_y[1], tx);
+                int high = lerp(portal.high_y[0], portal.high_y[1], tx);
+
+                window_low[x]  = clamp(low, 0, SCREEN_HEIGHT - 1);
+                window_high[x] = clamp(high, 0, SCREEN_HEIGHT);
             }
         }
 
@@ -545,37 +641,6 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                 if (!clipWall(clip_planes[0], &view_space, attr)) continue;
                 if (!clipWall(clip_planes[1], &view_space, attr)) continue;
-
-#ifndef CURRENT_SECTOR_ONLY
-                if (is_portal) {
-                    if (wall_next < pod.num_sectors) {
-                        unsigned start_tier = getSectorTier(pod, cam.pos[2], wall_next);
-                        unsigned num_tiers  = pod.sectors[wall_next].num_tiers;
-
-                        if (start_tier >= num_tiers) start_tier = 0;
-
-                        sector_queue[sector_queue_end] = wall_next;
-                        tier_queue[sector_queue_end]   = start_tier;
-                        sector_queue_end               = (sector_queue_end + 1) % 128;
-
-                        // go down
-                        for (unsigned i = start_tier; i > 0;) {
-                            --i;
-                            sector_queue[sector_queue_end] = wall_next;
-                            tier_queue[sector_queue_end]   = i;
-                            sector_queue_end               = (sector_queue_end + 1) % 128;
-                        }
-
-                        // go up
-                        for (unsigned i = start_tier + 1; i < num_tiers; ++i) {
-                            sector_queue[sector_queue_end] = wall_next;
-                            tier_queue[sector_queue_end]   = i;
-                            sector_queue_end               = (sector_queue_end + 1) % 128;
-                        }
-                    }
-                }
-#endif
-
                 if (!clipWall(clip_planes[2], &view_space, attr)) continue;
                 if (!clipWall(clip_planes[3], &view_space, attr)) continue;
             }
@@ -628,6 +693,123 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             }
 
 
+#ifndef CURRENT_SECTOR_ONLY
+// BUG: Wall gets clipped prior to this, so when close to a portal, the next sector will not be rendered
+            if (is_portal) {
+                if (wall_next < pod.num_sectors) {
+                    SectorDef nsector   = pod.sectors[wall_next];
+                    unsigned start_tier = getSectorTier(pod, cam.pos[2], wall_next);
+                    unsigned num_tiers  = nsector.num_tiers;
+
+                    if (start_tier >= num_tiers) start_tier = 0;
+
+                    TrapezoidPortal tmp_portal;
+
+                    {
+                        tmp_portal.min_x = start_x;
+                        tmp_portal.max_x = end_x;
+
+                        float dist_to_nfloor   = (cam.pos[2] - nsector.floor_heights[start_tier]);
+                        float dist_to_nceiling = (nsector.ceiling_heights[start_tier] - cam.pos[2]);
+
+                        float top_of_nwall[2] = {
+                            (0.5 - dist_to_nceiling * ndc_space.points[0][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
+                            (0.5 - dist_to_nceiling * ndc_space.points[1][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
+                        };
+
+                        float bottom_of_nwall[2] = {
+                            (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[0][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
+                            (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
+                        };
+
+                        tmp_portal.low_y[0]  = max(top_of_nwall[0], top_of_wall[0]);
+                        tmp_portal.low_y[1]  = max(top_of_nwall[1], top_of_wall[1]);
+                        tmp_portal.high_y[0] = min(bottom_of_nwall[0], bottom_of_wall[0]);
+                        tmp_portal.high_y[1] = min(bottom_of_nwall[1], bottom_of_wall[1]);
+
+                        if (clipTrapPortal(portal, &tmp_portal)) {
+                            sector_queue[sector_queue_end] = wall_next;
+                            tier_queue[sector_queue_end]   = start_tier;
+                            portal_queue[sector_queue_end] = tmp_portal;
+
+                            sector_queue_end = (sector_queue_end + 1) % 128;
+                        }
+                    }
+
+                    // go down
+                    for (unsigned i = start_tier; i > 0;) {
+                        --i;
+
+                        {
+                            tmp_portal.min_x = start_x;
+                            tmp_portal.max_x = end_x;
+
+                            float dist_to_nfloor   = (cam.pos[2] - nsector.floor_heights[i]);
+                            float dist_to_nceiling = (nsector.ceiling_heights[i] - cam.pos[2]);
+
+                            float top_of_nwall[2] = {
+                                (0.5 - dist_to_nceiling * ndc_space.points[0][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
+                                (0.5 - dist_to_nceiling * ndc_space.points[1][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
+                            };
+
+                            float bottom_of_nwall[2] = {
+                                (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[0][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
+                                (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
+                            };
+
+                            tmp_portal.low_y[0]  = max(top_of_nwall[0], top_of_wall[0]);
+                            tmp_portal.low_y[1]  = max(top_of_nwall[1], top_of_wall[1]);
+                            tmp_portal.high_y[0] = min(bottom_of_nwall[0], bottom_of_wall[0]);
+                            tmp_portal.high_y[1] = min(bottom_of_nwall[1], bottom_of_wall[1]);
+
+                            if (clipTrapPortal(portal, &tmp_portal)) {
+                                sector_queue[sector_queue_end] = wall_next;
+                                tier_queue[sector_queue_end]   = i;
+                                portal_queue[sector_queue_end] = tmp_portal;
+
+                                sector_queue_end = (sector_queue_end + 1) % 128;
+                            }
+                        }
+                    }
+
+                    // go up
+                    for (unsigned i = start_tier + 1; i < num_tiers; ++i) {
+                        {
+                            tmp_portal.min_x = start_x;
+                            tmp_portal.max_x = end_x;
+
+                            float dist_to_nfloor   = (cam.pos[2] - nsector.floor_heights[i]);
+                            float dist_to_nceiling = (nsector.ceiling_heights[i] - cam.pos[2]);
+
+                            float top_of_nwall[2] = {
+                                (0.5 - dist_to_nceiling * ndc_space.points[0][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
+                                (0.5 - dist_to_nceiling * ndc_space.points[1][1] * INV_TAN_FOV_HALF + cam.pitch) * SCREEN_HEIGHT,
+                            };
+
+                            float bottom_of_nwall[2] = {
+                                (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[0][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
+                                (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT,
+                            };
+
+                            tmp_portal.low_y[0]  = max(top_of_nwall[0], top_of_wall[0]);
+                            tmp_portal.low_y[1]  = max(top_of_nwall[1], top_of_wall[1]);
+                            tmp_portal.high_y[0] = min(bottom_of_nwall[0], bottom_of_wall[0]);
+                            tmp_portal.high_y[1] = min(bottom_of_nwall[1], bottom_of_wall[1]);
+
+                            if (clipTrapPortal(portal, &tmp_portal)) {
+                                sector_queue[sector_queue_end] = wall_next;
+                                tier_queue[sector_queue_end]   = i;
+                                portal_queue[sector_queue_end] = tmp_portal;
+
+                                sector_queue_end = (sector_queue_end + 1) % 128;
+                            }
+                        }
+                    }
+                }
+            }
+#endif
+
+
 #ifndef NO_CEILINGS
 
             // render ceiling
@@ -645,38 +827,38 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                     for (int x = start_x; x <= end_x; ++x) {
                         if (y < window_low[x] ||
-                            y >= window_high[x] ||
-                            y < tmp_window_low[x] ||
-                            y >= tmp_window_high[x]) continue;
+                            y >= window_high[x]) continue;
 
                         int depth_index             = x + y * SCREEN_WIDTH;
                         g_depth_buffer[depth_index] = depth;
 
-                        float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO * TAN_FOV_HALF;
+                        if (!g_render_occlusion) {
+                            float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO * TAN_FOV_HALF;
 
-                        float rx = cam.rot_cos * wx + -cam.rot_sin * wy;
-                        float ry = cam.rot_sin * wx + cam.rot_cos * wy;
+                            float rx = cam.rot_cos * wx + -cam.rot_sin * wy;
+                            float ry = cam.rot_sin * wx + cam.rot_cos * wy;
 
-                        float px = (rx * scale / wz + cam.pos[0]);
-                        float py = (ry * scale / wz + cam.pos[1]);
+                            float px = (rx * scale / wz + cam.pos[0]);
+                            float py = (ry * scale / wz + cam.pos[1]);
 
-                        WallAttribute attr = {
-                            .uv        = { px, py },
-                            .world_pos = { px, py, sector_world_ceiling },
-                            .normal    = { 0.0f, 0.0f, -1.0f },
-                        };
-                        Color color;
+                            WallAttribute attr = {
+                                .uv        = { px, py },
+                                .world_pos = { px, py, sector_world_ceiling },
+                                .normal    = { 0.0f, 0.0f, -1.0f },
+                            };
+                            Color color;
 
-                        bool draw;
-                        unsigned ti = sector.ceiling_texture_ids[tier_index];
-                        if (sector.is_skys[tier_index]) {
-                            draw = skyPixelProgram(attr, cam, ti, x, y, &color);
-                        } else {
-                            draw = pixelProgram(attr, cam, ti, x, y, &color);
-                        }
+                            bool draw;
+                            unsigned ti = sector.ceiling_texture_ids[tier_index];
+                            if (sector.is_skys[tier_index]) {
+                                draw = skyPixelProgram(attr, cam, ti, x, y, &color);
+                            } else {
+                                draw = pixelProgram(attr, cam, ti, x, y, &color);
+                            }
 
-                        if (draw) {
-                            setPixel(x, y, color);
+                            if (draw) {
+                                setPixel(x, y, color);
+                            }
                         }
                     }
                 }
@@ -700,34 +882,34 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                     for (int x = start_x; x <= end_x; ++x) {
                         if (y < window_low[x] ||
-                            y >= window_high[x] ||
-                            y < tmp_window_low[x] ||
-                            y >= tmp_window_high[x]) continue;
+                            y >= window_high[x]) continue;
 
                         int depth_index             = x + y * SCREEN_WIDTH;
                         g_depth_buffer[depth_index] = depth;
 
-                        float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO * TAN_FOV_HALF;
+                        if (!g_render_occlusion) {
+                            float wx = (x - SCREEN_WIDTH_HALF) / SCREEN_WIDTH * ASPECT_RATIO * TAN_FOV_HALF;
 
-                        float rx = cam.rot_cos * wx + -cam.rot_sin * wy;
-                        float ry = cam.rot_sin * wx + cam.rot_cos * wy;
+                            float rx = cam.rot_cos * wx + -cam.rot_sin * wy;
+                            float ry = cam.rot_sin * wx + cam.rot_cos * wy;
 
-                        float px = (rx * scale / wz + cam.pos[0]);
-                        float py = (ry * scale / wz + cam.pos[1]);
+                            float px = (rx * scale / wz + cam.pos[0]);
+                            float py = (ry * scale / wz + cam.pos[1]);
 
-                        WallAttribute attr = {
-                            .uv        = { px, py },
-                            .world_pos = { px, py, sector_world_floor },
-                            .normal    = { 0.0f, 0.0f, 1.0f },
-                        };
-                        Color color;
+                            WallAttribute attr = {
+                                .uv        = { px, py },
+                                .world_pos = { px, py, sector_world_floor },
+                                .normal    = { 0.0f, 0.0f, 1.0f },
+                            };
+                            Color color;
 
-                        bool draw;
-                        unsigned ti = sector.floor_texture_ids[tier_index];
-                        draw        = pixelProgram(attr, cam, ti, x, y, &color);
+                            bool draw;
+                            unsigned ti = sector.floor_texture_ids[tier_index];
+                            draw        = pixelProgram(attr, cam, ti, x, y, &color);
 
-                        if (draw) {
-                            setPixel(x, y, color);
+                            if (draw) {
+                                setPixel(x, y, color);
+                            }
                         }
                     }
                 }
@@ -756,12 +938,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     int start_y_real = start_y;
                     int end_y_real   = end_y;
 
-                    start_y = clamp(start_y, max(window_low[x], tmp_window_low[x]), min(window_high[x], tmp_window_high[x]));
-                    end_y   = clamp(end_y, max(window_low[x], tmp_window_low[x]), min(window_high[x], tmp_window_high[x]));
-
-                    if (last_tier) {
-                        window_high[x] = 0;
-                    }
+                    start_y = clamp(start_y, window_low[x], window_high[x]);
+                    end_y   = clamp(end_y, window_low[x], window_high[x]);
 
                     // wall
                     for (int y = start_y; y < end_y; ++y) {
@@ -769,27 +947,30 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                         g_depth_buffer[depth_index] = depth;
 
-                        float ty = (float)(y - start_y_real) / (end_y_real - start_y_real);
+                        if (!g_render_occlusion) {
 
-                        float v      = lerp(attr[1].uv[1], attr[0].uv[1], ty);
-                        world_pos[2] = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
+                            float ty = (float)(y - start_y_real) / (end_y_real - start_y_real);
 
-                        WallAttribute attr = {
-                            .uv        = { u, v },
-                            .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
-                            .normal    = { wall_norm[0], wall_norm[1], 0.0f },
-                        };
-                        Color color;
+                            float v      = lerp(attr[1].uv[1], attr[0].uv[1], ty);
+                            world_pos[2] = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
 
-                        bool draw;
-                        if (wall_is_sky) {
-                            draw = skyPixelProgram(attr, cam, wall_texid, x, y, &color);
-                        } else {
-                            draw = pixelProgram(attr, cam, wall_texid, x, y, &color);
-                        }
+                            WallAttribute attr = {
+                                .uv        = { u, v },
+                                .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
+                                .normal    = { wall_norm[0], wall_norm[1], 0.0f },
+                            };
+                            Color color;
 
-                        if (draw) {
-                            setPixel(x, y, color);
+                            bool draw;
+                            if (wall_is_sky) {
+                                draw = skyPixelProgram(attr, cam, wall_texid, x, y, &color);
+                            } else {
+                                draw = pixelProgram(attr, cam, wall_texid, x, y, &color);
+                            }
+
+                            if (draw) {
+                                setPixel(x, y, color);
+                            }
                         }
                     }
                 }
@@ -797,14 +978,8 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 #ifndef NO_STEPS
                 // draw steps
                 SectorDef nsector = pod.sectors[wall_next];
-                bool single_tier  = nsector.num_tiers == 1;
 
-                unsigned sector_queue_start = (sector_queue_end - nsector.num_tiers + 128) % 128;
-
-                // for (unsigned ntier_index = 0; ntier_index < nsector.num_tiers; ++ntier_index) {
-                for (unsigned i = 0; i < nsector.num_tiers; ++i) {
-                    unsigned ntier_index = tier_queue[sector_queue_start + i];
-
+                for (unsigned ntier_index = 0; ntier_index < nsector.num_tiers; ++ntier_index) {
                     float nsector_world_floor   = nsector.floor_heights[ntier_index];
                     float nsector_world_ceiling = nsector.ceiling_heights[ntier_index];
 
@@ -824,7 +999,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                     float top_of_step[2];
                     float bottom_of_step[2];
 
-                    if (single_tier || ntier_index >= nsector.num_tiers - 1) {
+                    if (ntier_index >= nsector.num_tiers - 1) {
                         // this is the very top step
                         top_of_step[0] = top_of_wall[0];
                         top_of_step[1] = top_of_wall[1];
@@ -836,7 +1011,7 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         top_of_step[1]            = (1.0 - (0.5 - dist_to_nfloor * ndc_space.points[1][1] * INV_TAN_FOV_HALF) + cam.pitch) * SCREEN_HEIGHT;
                     }
 
-                    if (single_tier || ntier_index == 0) {
+                    if (ntier_index == 0) {
                         // this is the very first step
                         bottom_of_step[0] = bottom_of_wall[0];
                         bottom_of_step[1] = bottom_of_wall[1];
@@ -844,22 +1019,6 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         // dont draw bottom steps because they are covered by top step
                         bottom_of_step[0] = bottom_of_nwall[0];
                         bottom_of_step[1] = bottom_of_nwall[1];
-                    }
-
-                    if (!single_tier) {
-                        x_queue[sector_queue_start + i][0] = start_x;
-                        x_queue[sector_queue_start + i][1] = end_x;
-                        y_queue[sector_queue_start + i][0] = max(top_of_nwall[0], top_of_step[0]);
-                        y_queue[sector_queue_start + i][1] = max(top_of_nwall[1], top_of_step[1]);
-                        y_queue[sector_queue_start + i][2] = min(bottom_of_nwall[0] + 1, bottom_of_step[0] + 1);
-                        y_queue[sector_queue_start + i][3] = min(bottom_of_nwall[1] + 1, bottom_of_step[1] + 1);
-                    } else {
-                        x_queue[sector_queue_start + i][0] = INT32_MIN;
-                        x_queue[sector_queue_start + i][1] = INT32_MIN;
-                        y_queue[sector_queue_start + i][0] = INT32_MIN;
-                        y_queue[sector_queue_start + i][1] = INT32_MIN;
-                        y_queue[sector_queue_start + i][2] = INT32_MIN;
-                        y_queue[sector_queue_start + i][3] = INT32_MIN;
                     }
 
                     for (int x = start_x; x <= end_x; ++x) {
@@ -885,16 +1044,11 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                         int start_y_real = lerp(top_of_wall[0], top_of_wall[1], tx);
                         int end_y_real   = lerp(bottom_of_wall[0], bottom_of_wall[1], tx);
 
-                        start_y = clamp(start_y, max(window_low[x], tmp_window_low[x]), min(window_high[x], tmp_window_high[x]));
-                        end_y   = clamp(end_y, max(window_low[x], tmp_window_low[x]), min(window_high[x], tmp_window_high[x]));
+                        start_y = clamp(start_y, window_low[x], window_high[x]);
+                        end_y   = clamp(end_y, window_low[x], window_high[x]);
 
-                        start_ny = clamp(min(start_ny, end_y), max(window_low[x], tmp_window_low[x]), min(window_high[x], tmp_window_high[x]));
-                        end_ny   = clamp(max(end_ny, start_y), max(window_low[x], tmp_window_low[x]), min(window_high[x], tmp_window_high[x]));
-
-                        if (single_tier) {
-                            window_low[x]  = max(start_ny, start_y);
-                            window_high[x] = min(end_ny, end_y);
-                        }
+                        start_ny = clamp(min(start_ny, end_y), window_low[x], window_high[x]);
+                        end_ny   = clamp(max(end_ny, start_y), window_low[x], window_high[x]);
 
                         // top step
                         for (int y = start_y; y < start_ny; ++y) {
@@ -902,27 +1056,29 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
 
                             g_depth_buffer[depth_index] = depth;
 
-                            float ty = (float)(y - start_y_real) / (end_y_real - start_y_real);
+                            if (!g_render_occlusion) {
+                                float ty = (float)(y - start_y_real) / (end_y_real - start_y_real);
 
-                            float v      = lerp(attr[1].uv[1], attr[0].uv[1], ty);
-                            world_pos[2] = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
+                                float v      = lerp(attr[1].uv[1], attr[0].uv[1], ty);
+                                world_pos[2] = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
 
-                            WallAttribute attr = {
-                                .uv        = { u, v },
-                                .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
-                                .normal    = { wall_norm[0], wall_norm[1], 0.0f },
-                            };
-                            Color color;
+                                WallAttribute attr = {
+                                    .uv        = { u, v },
+                                    .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
+                                    .normal    = { wall_norm[0], wall_norm[1], 0.0f },
+                                };
+                                Color color;
 
-                            bool draw;
-                            if (wall_is_sky) {
-                                draw = skyPixelProgram(attr, cam, wall_texid, x, y, &color);
-                            } else {
-                                draw = pixelProgram(attr, cam, wall_texid, x, y, &color);
-                            }
+                                bool draw;
+                                if (wall_is_sky) {
+                                    draw = skyPixelProgram(attr, cam, wall_texid, x, y, &color);
+                                } else {
+                                    draw = pixelProgram(attr, cam, wall_texid, x, y, &color);
+                                }
 
-                            if (draw) {
-                                setPixel(x, y, color);
+                                if (draw) {
+                                    setPixel(x, y, color);
+                                }
                             }
                         }
 
@@ -931,26 +1087,29 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
                             int depth_index = x + y * SCREEN_WIDTH;
 
                             g_depth_buffer[depth_index] = depth;
-                            float ty                    = (float)(y - start_y_real) / (end_y_real - start_y_real);
-                            float v                     = lerp(attr[1].uv[1], attr[0].uv[1], ty);
-                            world_pos[2]                = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
+                            if (!g_render_occlusion) {
+                                float ty     = (float)(y - start_y_real) / (end_y_real - start_y_real);
+                                float v      = lerp(attr[1].uv[1], attr[0].uv[1], ty);
+                                world_pos[2] = lerp(attr[1].world_pos[2], attr[0].world_pos[2], ty);
 
-                            WallAttribute attr = {
-                                .uv        = { u, v },
-                                .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
-                                .normal    = { wall_norm[0], wall_norm[1], 0.0f },
-                            };
-                            Color color;
 
-                            bool draw;
-                            if (wall_is_sky) {
-                                draw = skyPixelProgram(attr, cam, wall_texid, x, y, &color);
-                            } else {
-                                draw = pixelProgram(attr, cam, wall_texid, x, y, &color);
-                            }
+                                WallAttribute attr = {
+                                    .uv        = { u, v },
+                                    .world_pos = { world_pos[0], world_pos[1], world_pos[2] },
+                                    .normal    = { wall_norm[0], wall_norm[1], 0.0f },
+                                };
+                                Color color;
 
-                            if (draw) {
-                                setPixel(x, y, color);
+                                bool draw;
+                                if (wall_is_sky) {
+                                    draw = skyPixelProgram(attr, cam, wall_texid, x, y, &color);
+                                } else {
+                                    draw = pixelProgram(attr, cam, wall_texid, x, y, &color);
+                                }
+
+                                if (draw) {
+                                    setPixel(x, y, color);
+                                }
                             }
                         }
                     }
@@ -959,24 +1118,26 @@ void renderPortalWorld(PortalWorld pod, Camera cam) {
             }
         }
         last_tier = false;
+
+
+        if (g_render_occlusion) {
+
+            for (unsigned x = 0; x < SCREEN_WIDTH; ++x) {
+                // for (unsigned y = 0; y < window_low[x]; ++y) {
+                //     setPixel(x, y, COLOR_BLACK);
+                // }
+
+                for (unsigned y = window_low[x]; y < window_high[x]; ++y) {
+                    Color c = getPixel(x, y);
+                    setPixel(x, y, RGB(c.r + 128, c.g + 64, c.b + 32));
+                }
+
+                // for (unsigned y = window_high[x]; y < SCREEN_HEIGHT; ++y) {
+                //     setPixel(x, y, COLOR_BLACK);
+                // }
+            }
+        }
     }
-
-
-#ifdef RENDER_OCCLUSION
-    for (unsigned x = 0; x < SCREEN_WIDTH; ++x) {
-        for (unsigned y = 0; y < max(window_low[x], tmp_window_low[x]); ++y) {
-            setPixel(x, y, COLOR_BLACK);
-        }
-
-        for (unsigned y = max(window_low[x], tmp_window_low[x]); y < min(window_high[x], tmp_window_high[x]); ++y) {
-            setPixel(x, y, COLOR_WHITE);
-        }
-
-        for (unsigned y = min(window_high[x], tmp_window_high[x]); y < SCREEN_HEIGHT; ++y) {
-            setPixel(x, y, COLOR_BLACK);
-        }
-    }
-#endif
 }
 
 //

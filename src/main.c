@@ -72,6 +72,8 @@ uint16_t *g_depth_buffer;
 Image g_image_array[3];
 Image g_sky_image_array[1];
 
+bool g_render_occlusion = false;
+
 int main(int argc, char *argv[]) {
 
     SDL_Init(SDL_INIT_VIDEO);
@@ -122,10 +124,10 @@ int main(int argc, char *argv[]) {
     const unsigned MAIN_FONT_CHAR_WIDTH = 16;
     if (!readPng("res/fonts/vhs.png", &main_font)) return -1;
 
-    if(!readPng("res/textures/wall.png", &g_image_array[0])) return -1;
-    if(!readPng("res/textures/floor.png", &g_image_array[1])) return -1;
-    if(!readPng("res/textures/ceiling.png", &g_image_array[2])) return -1;
-    if(!readPng("res/textures/MUNSKY01.png", &g_sky_image_array[0])) return -1;
+    if (!readPng("res/textures/wall.png", &g_image_array[0])) return -1;
+    if (!readPng("res/textures/floor.png", &g_image_array[1])) return -1;
+    if (!readPng("res/textures/ceiling.png", &g_image_array[2])) return -1;
+    if (!readPng("res/textures/MUNSKY01.png", &g_sky_image_array[0])) return -1;
 
     char print_buffer[128];
 
@@ -141,7 +143,7 @@ int main(int argc, char *argv[]) {
     mat3 view_mat;
 
     PortalWorld pod;
-    if(!loadWorld("res/maps/map0.map", &pod, WORLD_SCALE)) return -3;
+    if (!loadWorld("res/maps/map0.map", &pod, WORLD_SCALE)) return -3;
 
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
@@ -171,7 +173,7 @@ int main(int argc, char *argv[]) {
         {
             if (keys[SDL_SCANCODE_L] && !last_keys[SDL_SCANCODE_L]) {
                 PortalWorld pod2;
-                if(loadWorld("res/maps/map0.map", &pod2, WORLD_SCALE)) {
+                if (loadWorld("res/maps/map0.map", &pod2, WORLD_SCALE)) {
                     freeWorld(pod);
                     pod = pod2;
                     printf("Reloaded world\n");
@@ -184,11 +186,15 @@ int main(int argc, char *argv[]) {
                 render_depth = !render_depth;
             }
 
+            if (keys[SDL_SCANCODE_O] && !last_keys[SDL_SCANCODE_O]) {
+                g_render_occlusion = !g_render_occlusion;
+            }
+
             if (keys[SDL_SCANCODE_M] && !last_keys[SDL_SCANCODE_M]) {
                 render_map = !render_map;
             }
 
-            if (keys[SDL_SCANCODE_O] && !last_keys[SDL_SCANCODE_O]) {
+            if (keys[SDL_SCANCODE_X] && !last_keys[SDL_SCANCODE_X]) {
                 render_overlay = !render_overlay;
             }
 
@@ -269,11 +275,11 @@ int main(int argc, char *argv[]) {
             // printf("%f, %f\n", cam.pos[0], cam.pos[1]);
 
             cam.sector = getCurrentSector(pod, cam.pos, cam.sector);
-            cam.tier = getSectorTier(pod, cam.pos[2], cam.sector);
+            cam.tier   = getSectorTier(pod, cam.pos[2], cam.sector);
 
             if (cam.sector < pod.num_sectors) {
                 if (cam.tier >= pod.sectors[cam.sector].num_tiers) cam.tier = 0;
-                
+
                 // cam.pos[2] = pod.sectors[cam.sector].floor_heights[0] + 1.65f;
                 // cam.pos[2] = pod.sectors[cam.sector].floor_height + 0.5f;
 
@@ -284,7 +290,7 @@ int main(int argc, char *argv[]) {
                 pod.sectors[cam.sector].floor_heights[cam.tier] += input_floor * delta;
             } else {
                 cam.sector = 0;
-                cam.tier = 0;
+                cam.tier   = 0;
             }
         }
 
@@ -379,15 +385,15 @@ int main(int argc, char *argv[]) {
             renderText(print_buffer, 0, 0, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
 
             snprintf(print_buffer, sizeof(print_buffer), "CEIL: %f", pod.sectors[cam.sector].ceiling_heights[cam.tier]);
-            renderText(print_buffer, 1, 24+1, COLOR_BLACK, main_font, MAIN_FONT_CHAR_WIDTH);
+            renderText(print_buffer, 1, 24 + 1, COLOR_BLACK, main_font, MAIN_FONT_CHAR_WIDTH);
             renderText(print_buffer, 0, 24, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
 
             snprintf(print_buffer, sizeof(print_buffer), "FLOOR: %f", pod.sectors[cam.sector].floor_heights[cam.tier]);
-            renderText(print_buffer, 1, 24 * 2+1, COLOR_BLACK, main_font, MAIN_FONT_CHAR_WIDTH);
+            renderText(print_buffer, 1, 24 * 2 + 1, COLOR_BLACK, main_font, MAIN_FONT_CHAR_WIDTH);
             renderText(print_buffer, 0, 24 * 2, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
 
             snprintf(print_buffer, sizeof(print_buffer), "PITCH: %f", cam.pitch);
-            renderText(print_buffer, 1, 24 * 3+1, COLOR_BLACK, main_font, MAIN_FONT_CHAR_WIDTH);
+            renderText(print_buffer, 1, 24 * 3 + 1, COLOR_BLACK, main_font, MAIN_FONT_CHAR_WIDTH);
             renderText(print_buffer, 0, 24 * 3, COLOR_WHITE, main_font, MAIN_FONT_CHAR_WIDTH);
         }
 

@@ -33,5 +33,6 @@ Color **getPixelBufferPtr();
 
 void setPixel(unsigned x, unsigned y, Color color);
 void setPixelI(unsigned i, Color color);
+Color getPixel(unsigned x, unsigned y);
 
 void drawLine(int x0, int y0, int x1, int y1, Color color);

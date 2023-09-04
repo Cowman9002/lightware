@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util.h"
+#include "mathlib.h"
 #include <stdbool.h>
 
 typedef struct Line {

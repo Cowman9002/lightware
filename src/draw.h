@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util.h"
+#include "mathlib.h"
 #include "color.h"
 #include <stdbool.h>
 
@@ -17,7 +17,7 @@
 #define INV_ASPECT_RATIO ((float)SCREEN_HEIGHT / SCREEN_WIDTH)
 
 #define FAR_PLANE 100.0f
-#define NEAR_PLANE 0.3f
+#define NEAR_PLANE 0.1f
 
 #define FLOAT_TO_DEPTH(z) ((z / FAR_PLANE) * (uint16_t)(~0))
 

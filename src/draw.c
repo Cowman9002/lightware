@@ -5,24 +5,24 @@
 #include <stdlib.h>
 #include <math.h>
 
-Color *g_pixels = NULL;
+static Color *s_pixels = NULL;
 
 Color **getPixelBufferPtr() {
-    return &g_pixels;
+    return &s_pixels;
 }
 
 void setPixel(unsigned x, unsigned y, Color color) {
     if (x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT) return;
-    g_pixels[x + y * SCREEN_WIDTH] = color;
+    s_pixels[x + y * SCREEN_WIDTH] = color;
 }
 
 void setPixelI(unsigned i, Color color) {
-    g_pixels[i] = color;
+    s_pixels[i] = color;
 }
 
 Color getPixel(unsigned x, unsigned y) {
     if (x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT) return (Color){};
-    return g_pixels[x + y * SCREEN_WIDTH];
+    return s_pixels[x + y * SCREEN_WIDTH];
 }
 
 // https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm

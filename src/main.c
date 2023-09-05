@@ -5,6 +5,7 @@
 #include "color.h"
 #include "draw.h"
 #include "mathlib.h"
+#include "portal_world.h"
 
 #include <stdio.h>
 #include <math.h>
@@ -12,6 +13,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
+
+// https://www.flipcode.com/archives/Building_a_3D_Portal_Engine-Issue_01_Introduction.shtml
 
 #ifdef MEMDEBUG
 void *d_malloc(size_t s) {
@@ -36,6 +39,8 @@ void d_free(void *mem) {
 #define free(m) d_free(m)
 #endif
 
+#define _STRINGIFY(v) #v
+#define STRINGIFY(v) _STRINGIFY(v)
 
 void renderText(const char *text, int draw_x, int draw_y, Color draw_color, Image font, unsigned char_width);
 
@@ -46,7 +51,7 @@ int main(int argc, char *argv[]) {
 
     SDL_Init(SDL_INIT_VIDEO);
 
-    SDL_Window *window = SDL_CreateWindow("Lightware",
+    SDL_Window *window     = SDL_CreateWindow("Lightware",
                                           SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                           SCREEN_WIDTH * PIXEL_SIZE, SCREEN_HEIGHT * PIXEL_SIZE,
                                           SDL_WINDOW_RESIZABLE);
@@ -80,7 +85,7 @@ int main(int argc, char *argv[]) {
 
     Image main_font;
     if (!readPng("res/fonts/small.png", &main_font)) return -1;
-    unsigned main_font_char_width =  main_font.width / 95;
+    unsigned main_font_char_width = main_font.width / 95;
 
     if (!readPng("res/textures/wall.png", &g_image_array[0])) return -1;
     if (!readPng("res/textures/floor.png", &g_image_array[1])) return -1;
@@ -88,6 +93,30 @@ int main(int argc, char *argv[]) {
     if (!readPng("res/textures/MUNSKY01.png", &g_sky_image_array[0])) return -1;
 
     char print_buffer[128];
+
+    PortalWorld pod;
+    SectorList_init(&pod.sectors);
+    {
+        Sector sector;
+        sector.ceiling_height       = 5.0f;
+        sector.floor_height         = 0.0f;
+        sector.polygon.num_points   = 4;
+        sector.polygon.points       = malloc(sector.polygon.num_points * sizeof(*sector.polygon.points));
+        sector.polygon.next_sectors = malloc(sector.polygon.num_points * sizeof(*sector.polygon.next_sectors));
+
+        for (unsigned i = 0; i < sector.polygon.num_points; ++i) {
+            sector.polygon.next_sectors[i] = NULL;
+        }
+
+        // clang-format off
+        sector.polygon.points[0][0] = -10.0f; sector.polygon.points[0][1] = -10.0f;
+        sector.polygon.points[1][0] = -10.0f; sector.polygon.points[1][1] = 10.0f;
+        sector.polygon.points[2][0] = 10.0f;  sector.polygon.points[2][1] = 10.0f;
+        sector.polygon.points[3][0] = 10.0f;  sector.polygon.points[3][1] = -10.0f;
+        // clang-format on
+
+        SectorList_push_back(&pod.sectors, sector);
+    }
 
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
@@ -126,7 +155,7 @@ int main(int argc, char *argv[]) {
             setPixelI(i, RGB(0, 0, 0));
         }
 
-        renderText("LightWare 0.1", 0, SCREEN_HEIGHT - main_font.height, COLOR_WHITE, main_font, main_font_char_width);
+        renderText("LightWare " STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR), 0, SCREEN_HEIGHT - main_font.height, COLOR_WHITE, main_font, main_font_char_width);
 
         SDL_UnlockTexture(screen_texture);
         SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
@@ -136,6 +165,8 @@ int main(int argc, char *argv[]) {
     }
 
 _success_exit:
+
+    freePortalWorld(pod);
 
     free(last_keys);
     SDL_DestroyTexture(screen_texture);

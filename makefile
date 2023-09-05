@@ -3,7 +3,7 @@ LIBS := -lm -lgdi32 -lzdll -lSDL2main -lSDL2.dll
 # CC := gcc
 CC := x86_64-w64-mingw32-gcc
 # CFLAGS := -Iinclude -Llib -Wall -MD -MP -g -DMEMDEBUG
-CFLAGS := -static-libgcc -Iinclude -Llib -Wall -MD -MP -ggdb
+CFLAGS := -DVERSION_MAJOR=0 -DVERSION_MINOR=1 -static-libgcc -Iinclude -Llib -Wall -MD -MP -ggdb
 # CFLAGS := -static-libgcc -Iinclude -Llib -Wall -MD -MP -O2
 
 .PHONY: default all clean
@@ -11,7 +11,7 @@ CFLAGS := -static-libgcc -Iinclude -Llib -Wall -MD -MP -ggdb
 default: $(TARGET)
 all: default
 
-SOURCES = src/main.c src/lodepng.c src/draw.c src/color.c src/geo.c src/mathlib.c
+SOURCES = src/main.c src/lodepng.c src/draw.c src/color.c src/geo.c src/mathlib.c src/portal_world.c
 OBJECTS = $(patsubst %.c, obj/%.o, $(SOURCES))
 HEADERS = $(wildcard *.h)
 

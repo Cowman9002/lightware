@@ -7,6 +7,7 @@ typedef struct Sector Sector;
 typedef struct SectorPoly{
     size_t num_points;
     vec2 *points;
+    vec4 *planes;
     Sector **next_sectors;
 }SectorPoly;
 
@@ -26,3 +27,5 @@ typedef struct PortalWorld {
 void freeSectorPoly(SectorPoly poly);
 void freeSector(Sector sector);
 void freePortalWorld(PortalWorld pod);
+
+void portalWorldRender(PortalWorld pod, mat4 vp_matrix, vec3 cam_pos);

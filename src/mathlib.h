@@ -22,12 +22,16 @@ float dot2d(vec2 a, vec2 b);
 float cross2d(vec2 a, vec2 b);
 float cross32d(vec2 a, vec2 b, vec2 c);
 float dist2d(vec2 a, vec2 b);
+float normalized2d(vec2 a, vec2 o);
+float normalize2d(vec2 a);
+void rot2d(vec2 a, float r, vec2 o);
 
 float dot3d(vec3 a, vec3 b);
 float dist3d(vec3 a, vec3 b);
 float normalized3d(vec3 a, vec3 o);
 float normalize3d(vec3 a);
 
+void mat4Identity(mat4 out);
 void mat4Translate(vec3 t, mat4 out);
 void mat4Scale(vec3 s, mat4 out);
 void mat4RotateX(float r, mat4 out);

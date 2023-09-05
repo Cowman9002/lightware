@@ -8,11 +8,15 @@
 #error Missing type or tag definition
 #endif
 
+#define LIST_CONCAT_STRUCT(tag, op) tag####op
+#define LIST_STRUCT2(tag, op) LIST_CONCAT_STRUCT(tag, op)
+#define LIST_STRUCT(op) LIST_STRUCT2(LIST_TAG, op)
+
 #define LIST_CONCAT(tag, method) tag##_##method
 #define LIST_METHOD2(tag, method) LIST_CONCAT(tag, method)
 #define LIST_METHOD(method) LIST_METHOD2(LIST_TAG, method)
 
-#define LIST_NODE_TAG LIST_METHOD(node)
+#define LIST_NODE_TAG LIST_STRUCT(Node)
 
 void LIST_METHOD(init)(LIST_TAG *const list) {
     list->head = NULL;
@@ -21,8 +25,8 @@ void LIST_METHOD(init)(LIST_TAG *const list) {
 }
 
 void LIST_METHOD(free)(LIST_TAG list) {
-    struct LIST_NODE_TAG *node = list.head;
-    struct LIST_NODE_TAG *node2;
+    LIST_NODE_TAG *node = list.head;
+    LIST_NODE_TAG *node2;
 
     while(node != NULL) {
 #ifdef LIST_ITEM_FREE_FUNC
@@ -36,8 +40,8 @@ void LIST_METHOD(free)(LIST_TAG list) {
 
 void LIST_METHOD(push_front)(LIST_TAG *const list, LIST_ITEM_TYPE item) {
     ++list->num_nodes;
-    struct LIST_NODE_TAG *new_node = (struct LIST_NODE_TAG *)malloc(sizeof(*list->head));
-    *new_node               = (struct LIST_NODE_TAG){ .item = item, .next = NULL, .prev = NULL };
+    LIST_NODE_TAG *new_node = (LIST_NODE_TAG *)malloc(sizeof(*list->head));
+    *new_node               = (LIST_NODE_TAG){ .item = item, .next = NULL, .prev = NULL };
 
     if (list->head == NULL && list->tail == NULL) {
         list->head = new_node;
@@ -51,8 +55,8 @@ void LIST_METHOD(push_front)(LIST_TAG *const list, LIST_ITEM_TYPE item) {
 
 void LIST_METHOD(push_back)(LIST_TAG *const list, LIST_ITEM_TYPE item) {
     ++list->num_nodes;
-    struct LIST_NODE_TAG *new_node = (struct LIST_NODE_TAG *)malloc(sizeof(*list->head));
-    *new_node               = (struct LIST_NODE_TAG){ .item = item, .next = NULL, .prev = NULL };
+    LIST_NODE_TAG *new_node = (LIST_NODE_TAG *)malloc(sizeof(*list->head));
+    *new_node               = (LIST_NODE_TAG){ .item = item, .next = NULL, .prev = NULL };
 
     if (list->head == NULL && list->tail == NULL) {
         list->head = new_node;
@@ -75,10 +79,10 @@ bool LIST_METHOD(insert)(LIST_TAG *const list, size_t location, LIST_ITEM_TYPE i
         return false;
     } else {
         ++list->num_nodes;
-        struct LIST_NODE_TAG *new_node = (struct LIST_NODE_TAG *)malloc(sizeof(*list->head));
-        *new_node               = (struct LIST_NODE_TAG){ .item = item, .next = NULL, .prev = NULL };
+        LIST_NODE_TAG *new_node = (LIST_NODE_TAG *)malloc(sizeof(*list->head));
+        *new_node               = (LIST_NODE_TAG){ .item = item, .next = NULL, .prev = NULL };
 
-        struct LIST_NODE_TAG *attach_point = list->head;
+        LIST_NODE_TAG *attach_point = list->head;
         --location;
         for (; location > 0; --location) {
             attach_point = attach_point->next;
@@ -100,7 +104,7 @@ bool LIST_METHOD(pop_front)(LIST_TAG *const list, LIST_ITEM_TYPE *o_item) {
             *o_item = list->head->item;
         }
 
-        struct LIST_NODE_TAG *old_head = list->head;
+        LIST_NODE_TAG *old_head = list->head;
         list->head              = list->head->next;
         list->head->prev        = NULL;
         free(old_head);
@@ -117,7 +121,7 @@ bool LIST_METHOD(pop_back)(LIST_TAG *const list, LIST_ITEM_TYPE *o_item) {
             *o_item = list->tail->item;
         }
 
-        struct LIST_NODE_TAG *old_tail = list->tail;
+        LIST_NODE_TAG *old_tail = list->tail;
         list->tail              = list->head->prev;
         list->tail->next        = NULL;
         free(old_tail);
@@ -136,7 +140,7 @@ bool LIST_METHOD(remove)(LIST_TAG *const list, size_t location, LIST_ITEM_TYPE *
     } else if (location > list->num_nodes) {
         return false;
     } else {
-        struct LIST_NODE_TAG *remove_point = list->head->next;
+        LIST_NODE_TAG *remove_point = list->head->next;
         --location;
         for (; location > 0; --location) {
             remove_point = remove_point->next;

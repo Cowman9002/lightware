@@ -20,6 +20,35 @@ float dist2d(vec2 a, vec2 b) {
     return sqrtf(sqr_dist);
 }
 
+float normalized2d(vec2 a, vec2 o) {
+    float len = sqrtf(dot2d(a, a));
+    if (len != 0) {
+        float inv_len = 1.0f / len;
+        for (unsigned i = 0; i < 2; ++i)
+            o[i] = a[i] * inv_len;
+    }
+    return len;
+}
+
+float normalize2d(vec2 a) {
+    float len = sqrtf(dot2d(a, a));
+    if (len != 0) {
+        float inv_len = 1.0f / len;
+        for (unsigned i = 0; i < 2; ++i)
+            a[i] *= inv_len;
+    }
+    return len;
+}
+
+
+void rot2d(vec2 a, float r, vec2 o) {
+    float c = cosf(r);
+    float s = sinf(r);
+
+    o[0] = c * a[0] + s * a[1];
+    o[1] = -s * a[0] + c * a[1];
+}
+
 float dot3d(vec3 a, vec3 b) {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
@@ -33,8 +62,9 @@ float dist3d(vec3 a, vec3 b) {
 float normalized3d(vec3 a, vec3 o) {
     float len = sqrtf(dot3d(a, a));
     if (len != 0) {
+        float inv_len = 1.0f / len;
         for (unsigned i = 0; i < 3; ++i)
-            o[i] = a[i] / len;
+            o[i] = a[i] * inv_len;
     }
     return len;
 }
@@ -42,12 +72,34 @@ float normalized3d(vec3 a, vec3 o) {
 float normalize3d(vec3 a) {
     float len = sqrtf(dot3d(a, a));
     if (len != 0) {
+        float inv_len = 1.0f / len;
         for (unsigned i = 0; i < 3; ++i)
-            a[i] /= len;
+            a[i] *= inv_len;
     }
     return len;
 }
 
+void mat4Identity(mat4 out) {
+    out[0 + 0 * 4] = 1.0f;
+    out[1 + 0 * 4] = 0.0f;
+    out[2 + 0 * 4] = 0.0f;
+    out[3 + 0 * 4] = 0.0f;
+
+    out[0 + 1 * 4] = 0.0f;
+    out[1 + 1 * 4] = 1.0f;
+    out[2 + 1 * 4] = 0.0f;
+    out[3 + 1 * 4] = 0.0f;
+
+    out[0 + 2 * 4] = 0.0f;
+    out[1 + 2 * 4] = 0.0f;
+    out[2 + 2 * 4] = 1.0f;
+    out[3 + 2 * 4] = 0.0f;
+
+    out[0 + 3 * 4] = 0.0f;
+    out[1 + 3 * 4] = 0.0f;
+    out[2 + 3 * 4] = 0.0f;
+    out[3 + 3 * 4] = 1.0f;
+}
 
 void mat4Translate(vec3 t, mat4 out) {
     out[0 + 0 * 4] = 1.0f;
@@ -169,27 +221,31 @@ void mat4RotateZ(float r, mat4 out) {
 }
 
 void mat4Perspective(float fov, float aspect_ratio, float near, float far, mat4 out) {
-    float inv_aspect = 1.0f / aspect_ratio;
+    float inv_aspect       = 1.0f / aspect_ratio;
     float inv_tan_half_fov = 1.0f / tanf(fov * 0.5f);
 
+    // x
     out[0 + 0 * 4] = inv_aspect * inv_tan_half_fov;
     out[1 + 0 * 4] = 0.0f;
     out[2 + 0 * 4] = 0.0f;
     out[3 + 0 * 4] = 0.0f;
 
+    // y
     out[0 + 1 * 4] = 0.0f;
-    out[1 + 1 * 4] = inv_tan_half_fov;
+    out[1 + 1 * 4] = -(far + near) / (far - near);
     out[2 + 1 * 4] = 0.0f;
-    out[3 + 1 * 4] = 0.0f;
+    out[3 + 1 * 4] = -(2 * far * near) / (far - near);
 
+    // z
     out[0 + 2 * 4] = 0.0f;
     out[1 + 2 * 4] = 0.0f;
-    out[2 + 2 * 4] = -(far + near) / (far - near);
-    out[3 + 2 * 4] = -(2 * far * near) / (far - near);
+    out[2 + 2 * 4] = inv_tan_half_fov;
+    out[3 + 2 * 4] = 0.0f;
 
+    // w
     out[0 + 3 * 4] = 0.0f;
-    out[1 + 3 * 4] = 0.0f;
-    out[2 + 3 * 4] = -1.0f;
+    out[1 + 3 * 4] = 1.0f;
+    out[2 + 3 * 4] = 0.0f;
     out[3 + 3 * 4] = 0.0f;
 }
 

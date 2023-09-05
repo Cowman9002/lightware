@@ -103,6 +103,7 @@ int main(int argc, char *argv[]) {
         sector.floor_height         = 0.0f;
         sector.polygon.num_points   = 4;
         sector.polygon.points       = malloc(sector.polygon.num_points * sizeof(*sector.polygon.points));
+        sector.polygon.planes       = malloc(sector.polygon.num_points * sizeof(*sector.polygon.planes));
         sector.polygon.next_sectors = malloc(sector.polygon.num_points * sizeof(*sector.polygon.next_sectors));
 
         for (unsigned i = 0; i < sector.polygon.num_points; ++i) {
@@ -111,22 +112,54 @@ int main(int argc, char *argv[]) {
 
         // clang-format off
         sector.polygon.points[0][0] = -10.0f; sector.polygon.points[0][1] = -10.0f;
-        sector.polygon.points[1][0] = -10.0f; sector.polygon.points[1][1] = 10.0f;
-        sector.polygon.points[2][0] = 10.0f;  sector.polygon.points[2][1] = 10.0f;
-        sector.polygon.points[3][0] = 10.0f;  sector.polygon.points[3][1] = -10.0f;
+        sector.polygon.points[1][0] = 10.0f; sector.polygon.points[1][1] = -10.0f;
+        sector.polygon.points[2][0] = 20.0f;  sector.polygon.points[2][1] = 20.0f;
+        sector.polygon.points[3][0] = -10.0f;  sector.polygon.points[3][1] = 10.0f;
         // clang-format on
+
+        // precalc the planes
+        for (unsigned i = 0; i < sector.polygon.num_points; ++i) {
+            unsigned j = (i + 1) % sector.polygon.num_points;
+            vec3 p0 = { 0 }, p1 = { 0 };
+            p0[0] = sector.polygon.points[i][0];
+            p0[1] = sector.polygon.points[i][1];
+            p1[0] = sector.polygon.points[j][0];
+            p1[1] = sector.polygon.points[j][1];
+
+            vec2 normal;
+            normal[0] = -(p1[1] - p0[1]);
+            normal[1] = (p1[0] - p0[0]);
+            normalize2d(normal);
+
+            float d = dot2d(normal, p0);
+
+            sector.polygon.planes[i][0] = normal[0];
+            sector.polygon.planes[i][1] = normal[1];
+            sector.polygon.planes[i][2] = 0.0f;
+            sector.polygon.planes[i][3] = d;
+        }
 
         SectorList_push_back(&pod.sectors, sector);
     }
 
+    mat4 tmp_mat[16];
+
+    vec3 cam_pos  = { 0.0f, 0.0f, 1.65f };
+    float cam_yaw = 0.0f, cam_pitch = 0.0f;
+
     mat4 proj_mat;
     mat4Perspective(70.0f * TO_RADS, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE, proj_mat);
 
-    mat4 view_translation, view_rotation;
     mat4 view_matrix;
-    mat4Translate((vec3){ 0.0, 0.0, 10.0f }, view_translation);
-
     mat4 vp_mat;
+
+    float map_scale = 1.0f;
+    mat4 map_projection;
+    mat4 map_mat;
+    mat4Translate((vec3){ SCREEN_WIDTH_HALF, SCREEN_HEIGHT_HALF, 0.0f }, tmp_mat[0]);
+    mat4Scale((vec3){ 1.0f, -1.0f, 1.0f }, tmp_mat[1]);
+    mat4Mul(tmp_mat[0], tmp_mat[1], map_projection);
+
 
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
@@ -158,9 +191,40 @@ int main(int argc, char *argv[]) {
         //      UPDATE
         ////////////////////////////////////////////////
 
-        mat4RotateY(seconds, view_rotation);
-        mat4Mul(view_translation, view_rotation, view_matrix);
+        {
+            float input_h = keys[SDL_SCANCODE_D] - keys[SDL_SCANCODE_A];
+            float input_v = keys[SDL_SCANCODE_W] - keys[SDL_SCANCODE_S];
+            float input_z = keys[SDL_SCANCODE_SPACE] - keys[SDL_SCANCODE_LSHIFT];
+            float input_r = keys[SDL_SCANCODE_RIGHT] - keys[SDL_SCANCODE_LEFT];
+            float input_p = keys[SDL_SCANCODE_UP] - keys[SDL_SCANCODE_DOWN];
 
+            map_scale += (keys[SDL_SCANCODE_Q] - keys[SDL_SCANCODE_Z]) * delta;
+            map_scale = max(map_scale, 0.1f);
+
+            cam_yaw += input_r * delta * 2.0f;
+            cam_pitch -= input_p * delta * 1.0f;
+            cam_pitch = clamp(cam_pitch, -M_PI * 0.5f, M_PI *0.5f);
+
+            vec2 movement_input;
+            rot2d((vec2){ input_h, input_v }, cam_yaw, movement_input);
+            normalize2d(movement_input);
+
+            cam_pos[0] += movement_input[0] * delta * 10.0f;
+            cam_pos[1] += movement_input[1] * delta * 10.0f;
+            cam_pos[2] += input_z * delta * 10.0f;
+        }
+
+        mat4Translate((vec3){ -cam_pos[0], -cam_pos[1], -cam_pos[2] }, tmp_mat[0]);
+        mat4RotateZ(-cam_yaw, tmp_mat[1]);
+        mat4RotateX(-cam_pitch, tmp_mat[2]);
+        mat4Scale((vec3){ map_scale, map_scale, 1.0f }, tmp_mat[3]);
+
+        mat4Mul(tmp_mat[1], tmp_mat[0], tmp_mat[4]);
+        mat4Mul(tmp_mat[3], tmp_mat[4], tmp_mat[5]);
+        mat4Mul(map_projection, tmp_mat[5], map_mat);
+
+        mat4Mul(tmp_mat[2], tmp_mat[1], tmp_mat[4]);
+        mat4Mul(tmp_mat[4], tmp_mat[0], view_matrix);
         mat4Mul(proj_mat, view_matrix, vp_mat);
 
         ////////////////////////////////////////////////
@@ -175,35 +239,44 @@ int main(int argc, char *argv[]) {
             setPixelI(i, RGB(0, 0, 0));
         }
 
+        portalWorldRender(pod, vp_mat, cam_pos);
+
+        // Render map view
         {
-            vec3 raw_points[4] = {
-                { -1.0f, -1.0f, 0.0f },
-                { 1.0f, -1.0f, 0.0f },
-                { 1.0f, 1.0f, 0.0f },
-                { -1.0f, 1.0f, 0.0f }
-            };
+            SectorListNode *node = pod.sectors.head;
+            while (node != NULL) {
+                for (unsigned i = 0; i < node->item.polygon.num_points; ++i) {
+                    unsigned j = (i + 1) % node->item.polygon.num_points;
+                    vec3 p0 = { 0 }, p1 = { 0 };
+                    p0[0] = node->item.polygon.points[i][0];
+                    p0[1] = node->item.polygon.points[i][1];
+                    p1[0] = node->item.polygon.points[j][0];
+                    p1[1] = node->item.polygon.points[j][1];
 
-            vec4 transformed_points[4];
-            vec2 ndc_points[4];
-            vec2 screen_points[4];
+                    vec2 normal;
+                    rot2d((vec2){node->item.polygon.planes[i][0], -node->item.polygon.planes[i][1]}, cam_yaw, normal);
 
-            for (unsigned i = 0; i < 4; ++i) {
-                transformed_points[i][3] = mat4MulVec3(vp_mat, raw_points[i], transformed_points[i]);
-                float inv_w              = 1.0f / transformed_points[i][3];
-                ndc_points[i][0]         = transformed_points[i][0] * inv_w;
-                ndc_points[i][1]         = transformed_points[i][1] * inv_w;
-                screen_points[i][0]      = (ndc_points[i][0] * 0.5 + 0.5) * SCREEN_WIDTH;
-                screen_points[i][1]      = (ndc_points[i][1] * 0.5 + 0.5) * SCREEN_HEIGHT;
+                    vec3 t0, t1;
+                    mat4MulVec3(map_mat, p0, t0);
+                    mat4MulVec3(map_mat, p1, t1);
+
+                    drawLine(t0[0] + 1, t0[1] + 1, t1[0] + 1, t1[1] + 1, COLOR_RED);
+                    drawLine(t0[0], t0[1], t1[0], t1[1], COLOR_WHITE);
+
+                    vec2 avg = { (t0[0] + t1[0]) * 0.5f, (t0[1] + t1[1]) * 0.5f };
+                    drawLine(avg[0], avg[1], avg[0] + normal[0] * map_scale * 2.0f, avg[1] + normal[1] * map_scale * 2.0f, COLOR_BLUE);
+                }
+                node = node->next;
             }
-
-            for (unsigned i = 0; i < 4; ++i) {
-                unsigned j = (i + 1) % 4;
-                drawLine(screen_points[i][0], screen_points[i][1], screen_points[j][0], screen_points[j][1], COLOR_WHITE);
-            }
+            setPixel(SCREEN_WIDTH_HALF, SCREEN_HEIGHT_HALF, COLOR_WHITE);
+            setPixel(SCREEN_WIDTH_HALF + 1, SCREEN_HEIGHT_HALF + 1, COLOR_GREEN);
         }
 
-        renderText("LightWare " STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR), 0, SCREEN_HEIGHT - main_font.height, COLOR_WHITE, main_font, main_font_char_width);
+        snprintf(print_buffer, sizeof(print_buffer), "{%6.3f, %6.3f, %6.3f}", cam_pos[0], cam_pos[1], cam_pos[2]);
+        renderText(print_buffer, 0, 0, COLOR_WHITE, main_font, main_font_char_width);
 
+        renderText("LightWare " STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR), 0, SCREEN_HEIGHT - main_font.height + 1, RGB(255, 200, 10), main_font, main_font_char_width);
+        renderText("LightWare " STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR), 0, SCREEN_HEIGHT - main_font.height, RGB(20, 60, 120), main_font, main_font_char_width);
         SDL_UnlockTexture(screen_texture);
         SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
         SDL_RenderPresent(renderer);

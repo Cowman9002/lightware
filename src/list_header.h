@@ -4,17 +4,21 @@
 #error Missing type or tag definition
 #endif
 
+#define LIST_CONCAT_STRUCT(tag, op) tag####op
+#define LIST_STRUCT2(tag, op) LIST_CONCAT_STRUCT(tag, op)
+#define LIST_STRUCT(op) LIST_STRUCT2(LIST_TAG, op)
+
 #define LIST_CONCAT(tag, method) tag##_##method
 #define LIST_METHOD2(tag, method) LIST_CONCAT(tag, method)
 #define LIST_METHOD(method) LIST_METHOD2(LIST_TAG, method)
 
-#define LIST_NODE_TAG LIST_METHOD(node)
+#define LIST_NODE_TAG LIST_STRUCT(Node)
 
-struct LIST_NODE_TAG {
+typedef struct LIST_NODE_TAG {
     LIST_ITEM_TYPE item;
     struct LIST_NODE_TAG *next;
     struct LIST_NODE_TAG *prev;
-};
+}LIST_NODE_TAG;
 
 typedef struct LIST_TAG {
     struct LIST_NODE_TAG *head;

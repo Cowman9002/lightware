@@ -168,6 +168,31 @@ void mat4RotateZ(float r, mat4 out) {
     out[3 + 3 * 4] = 1.0f;
 }
 
+void mat4Perspective(float fov, float aspect_ratio, float near, float far, mat4 out) {
+    float inv_aspect = 1.0f / aspect_ratio;
+    float inv_tan_half_fov = 1.0f / tanf(fov * 0.5f);
+
+    out[0 + 0 * 4] = inv_aspect * inv_tan_half_fov;
+    out[1 + 0 * 4] = 0.0f;
+    out[2 + 0 * 4] = 0.0f;
+    out[3 + 0 * 4] = 0.0f;
+
+    out[0 + 1 * 4] = 0.0f;
+    out[1 + 1 * 4] = inv_tan_half_fov;
+    out[2 + 1 * 4] = 0.0f;
+    out[3 + 1 * 4] = 0.0f;
+
+    out[0 + 2 * 4] = 0.0f;
+    out[1 + 2 * 4] = 0.0f;
+    out[2 + 2 * 4] = -(far + near) / (far - near);
+    out[3 + 2 * 4] = -(2 * far * near) / (far - near);
+
+    out[0 + 3 * 4] = 0.0f;
+    out[1 + 3 * 4] = 0.0f;
+    out[2 + 3 * 4] = -1.0f;
+    out[3 + 3 * 4] = 0.0f;
+}
+
 void mat4Mul(mat4 a, mat4 b, mat4 out) {
     // c[ji] = a[0i] * b[j0] + a[1i] * b[j1] + a[2i] * b[j2]
     for (unsigned c = 0; c < 4; c++) {

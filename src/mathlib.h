@@ -15,6 +15,7 @@
 
 typedef float vec2[2];
 typedef float vec3[3];
+typedef float vec4[4];
 typedef float mat4[16];
 
 float dot2d(vec2 a, vec2 b);
@@ -32,6 +33,8 @@ void mat4Scale(vec3 s, mat4 out);
 void mat4RotateX(float r, mat4 out);
 void mat4RotateY(float r, mat4 out);
 void mat4RotateZ(float r, mat4 out);
+
+void mat4Perspective(float fov, float aspect_ratio, float near, float far, mat4 out);
 
 void mat4Mul(mat4 a, mat4 b, mat4 out);
 

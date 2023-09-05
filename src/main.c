@@ -75,6 +75,7 @@ int main(int argc, char *argv[]) {
     uint64_t ticks;
     uint64_t last_ticks = SDL_GetTicks64();
     float delta;
+    float seconds;
 
     uint64_t next_fps_print = 1000;
     unsigned last_fps_frame = 0;
@@ -118,6 +119,15 @@ int main(int argc, char *argv[]) {
         SectorList_push_back(&pod.sectors, sector);
     }
 
+    mat4 proj_mat;
+    mat4Perspective(70.0f * TO_RADS, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE, proj_mat);
+
+    mat4 view_translation, view_rotation;
+    mat4 view_matrix;
+    mat4Translate((vec3){ 0.0, 0.0, 10.0f }, view_translation);
+
+    mat4 vp_mat;
+
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
@@ -125,6 +135,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
         ticks      = SDL_GetTicks64();
+        seconds    = ticks / 1000.0f;
         delta      = (float)(ticks - last_ticks) / 1000.0f;
         last_ticks = ticks;
 
@@ -144,6 +155,15 @@ int main(int argc, char *argv[]) {
         }
 
         ////////////////////////////////////////////////
+        //      UPDATE
+        ////////////////////////////////////////////////
+
+        mat4RotateY(seconds, view_rotation);
+        mat4Mul(view_translation, view_rotation, view_matrix);
+
+        mat4Mul(proj_mat, view_matrix, vp_mat);
+
+        ////////////////////////////////////////////////
         //      RENDER
         ////////////////////////////////////////////////
 
@@ -153,6 +173,33 @@ int main(int argc, char *argv[]) {
         // clear screen
         for (unsigned i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; ++i) {
             setPixelI(i, RGB(0, 0, 0));
+        }
+
+        {
+            vec3 raw_points[4] = {
+                { -1.0f, -1.0f, 0.0f },
+                { 1.0f, -1.0f, 0.0f },
+                { 1.0f, 1.0f, 0.0f },
+                { -1.0f, 1.0f, 0.0f }
+            };
+
+            vec4 transformed_points[4];
+            vec2 ndc_points[4];
+            vec2 screen_points[4];
+
+            for (unsigned i = 0; i < 4; ++i) {
+                transformed_points[i][3] = mat4MulVec3(vp_mat, raw_points[i], transformed_points[i]);
+                float inv_w              = 1.0f / transformed_points[i][3];
+                ndc_points[i][0]         = transformed_points[i][0] * inv_w;
+                ndc_points[i][1]         = transformed_points[i][1] * inv_w;
+                screen_points[i][0]      = (ndc_points[i][0] * 0.5 + 0.5) * SCREEN_WIDTH;
+                screen_points[i][1]      = (ndc_points[i][1] * 0.5 + 0.5) * SCREEN_HEIGHT;
+            }
+
+            for (unsigned i = 0; i < 4; ++i) {
+                unsigned j = (i + 1) % 4;
+                drawLine(screen_points[i][0], screen_points[i][1], screen_points[j][0], screen_points[j][1], COLOR_WHITE);
+            }
         }
 
         renderText("LightWare " STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR), 0, SCREEN_HEIGHT - main_font.height, COLOR_WHITE, main_font, main_font_char_width);

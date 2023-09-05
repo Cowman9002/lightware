@@ -42,6 +42,8 @@ void d_free(void *mem) {
 #define _STRINGIFY(v) #v
 #define STRINGIFY(v) _STRINGIFY(v)
 
+const char *const TITLE_STRING = "LightWare " STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR);
+
 void renderText(const char *text, int draw_x, int draw_y, Color draw_color, Image font, unsigned char_width);
 
 Image g_image_array[3];
@@ -144,13 +146,14 @@ int main(int argc, char *argv[]) {
 
     mat4 tmp_mat[16];
 
-    vec3 cam_pos  = { 0.0f, 0.0f, 1.65f };
+    vec3 cam_pos  = { 0.0f, -30.0f, 1.65f };
     float cam_yaw = 0.0f, cam_pitch = 0.0f;
 
     mat4 proj_mat;
-    mat4Perspective(70.0f * TO_RADS, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE, proj_mat);
+    mat4Perspective(FOV, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE, proj_mat);
 
     mat4 view_matrix;
+    mat4 view_rotation;
     mat4 vp_mat;
 
     float map_scale = 1.0f;
@@ -160,13 +163,14 @@ int main(int argc, char *argv[]) {
     mat4Scale((vec3){ 1.0f, -1.0f, 1.0f }, tmp_mat[1]);
     mat4Mul(tmp_mat[0], tmp_mat[1], map_projection);
 
+    mat4 frustum_matrix;
+    Frustum view_frustum;
 
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
 
     while (1) {
-
         ticks      = SDL_GetTicks64();
         seconds    = ticks / 1000.0f;
         delta      = (float)(ticks - last_ticks) / 1000.0f;
@@ -203,7 +207,7 @@ int main(int argc, char *argv[]) {
 
             cam_yaw += input_r * delta * 2.0f;
             cam_pitch -= input_p * delta * 1.0f;
-            cam_pitch = clamp(cam_pitch, -M_PI * 0.5f, M_PI *0.5f);
+            cam_pitch = clamp(cam_pitch, -M_PI * 0.5f, M_PI * 0.5f);
 
             vec2 movement_input;
             rot2d((vec2){ input_h, input_v }, cam_yaw, movement_input);
@@ -223,9 +227,13 @@ int main(int argc, char *argv[]) {
         mat4Mul(tmp_mat[3], tmp_mat[4], tmp_mat[5]);
         mat4Mul(map_projection, tmp_mat[5], map_mat);
 
-        mat4Mul(tmp_mat[2], tmp_mat[1], tmp_mat[4]);
-        mat4Mul(tmp_mat[4], tmp_mat[0], view_matrix);
+        mat4Mul(tmp_mat[2], tmp_mat[1], view_rotation);
+        mat4Mul(view_rotation, tmp_mat[0], view_matrix);
         mat4Mul(proj_mat, view_matrix, vp_mat);
+
+        mat4RotateZ(cam_yaw, tmp_mat[1]);
+        mat4RotateX(cam_pitch, tmp_mat[2]);
+        mat4Mul(tmp_mat[1], tmp_mat[2], frustum_matrix);
 
         ////////////////////////////////////////////////
         //      RENDER
@@ -239,7 +247,63 @@ int main(int argc, char *argv[]) {
             setPixelI(i, RGB(0, 0, 0));
         }
 
-        portalWorldRender(pod, vp_mat, cam_pos);
+        {
+            const float half_v        = FAR_PLANE * tanf(FOV * .5f);
+            const float half_h        = half_v * ASPECT_RATIO;
+            vec3 cam_front, cam_right, cam_up, cam_front_far;
+            mat4MulVec3(frustum_matrix, (vec3){1.0f, 0.0f, 0.0f}, cam_right);
+            mat4MulVec3(frustum_matrix, (vec3){0.0f, 1.0f, 0.0f}, cam_front);
+            mat4MulVec3(frustum_matrix, (vec3){0.0f, 0.0f, 1.0f}, cam_up);
+            for(unsigned _x = 0; _x < 3; ++_x) cam_front_far[_x] = cam_front[_x] * FAR_PLANE;
+
+            vec3 tmp_vec[2];
+
+            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[0][_x] = cam_right[_x] * half_h;
+            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[1][_x] = cam_front_far[_x] - tmp_vec[0][_x];
+            cross3d(tmp_vec[1], cam_up, view_frustum.planes[0]);
+
+            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[0][_x] = cam_right[_x] * half_h;
+            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[1][_x] = cam_front_far[_x] + tmp_vec[0][_x];
+            cross3d(cam_up, tmp_vec[1], view_frustum.planes[1]);
+
+            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[0][_x] = cam_up[_x] * half_v;
+            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[1][_x] = cam_front_far[_x] - tmp_vec[0][_x];
+            cross3d(cam_right, tmp_vec[1], view_frustum.planes[2]);
+
+            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[0][_x] = cam_up[_x] * half_v;
+            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[1][_x] = cam_front_far[_x] + tmp_vec[0][_x];
+            cross3d(tmp_vec[1], cam_right, view_frustum.planes[3]);
+            
+            for(unsigned _x = 0; _x < 3; ++_x) view_frustum.planes[4][_x] = cam_front[_x];
+            for(unsigned _x = 0; _x < 3; ++_x) view_frustum.planes[5][_x] = -cam_front[_x];
+
+            for(unsigned i = 0; i < 6; ++i) {  
+                normalize3d(view_frustum.planes[i]);
+                view_frustum.planes[i][3] = dot3d(view_frustum.planes[i], cam_pos);
+            }
+
+            view_frustum.planes[4][3] += NEAR_PLANE;
+            view_frustum.planes[5][3] += -FAR_PLANE;
+
+            // frustum.rightFace  = { cam.Position,
+            //                       glm::cross(frontMultFar - cam.Right * halfHSide, cam.Up) };
+            // frustum.leftFace   = { cam.Position,
+            //                      glm::cross(cam.Up, frontMultFar + cam.Right * halfHSide) };
+            // frustum.topFace    = { cam.Position,
+            //                     glm::cross(cam.Right, frontMultFar - cam.Up * halfVSide) };
+            // frustum.bottomFace = { cam.Position,
+            //                        glm::cross(frontMultFar + cam.Up * halfVSide, cam.Right) };
+            // frustum.nearFace   = { cam.Position + zNear * cam.Front, cam.Front };
+            // frustum.farFace    = { cam.Position + frontMultFar, -cam.Front };
+
+
+            // for(unsigned i = 0; i < 6; ++i) {
+            //     printf("%f, %f, %f %f\n", view_frustum.planes[i][0], view_frustum.planes[i][1], view_frustum.planes[i][2], view_frustum.planes[i][3]);
+            // }
+            // printf("\n");
+        }
+
+        portalWorldRender(pod, vp_mat, cam_pos, view_frustum);
 
         // Render map view
         {
@@ -254,7 +318,7 @@ int main(int argc, char *argv[]) {
                     p1[1] = node->item.polygon.points[j][1];
 
                     vec2 normal;
-                    rot2d((vec2){node->item.polygon.planes[i][0], -node->item.polygon.planes[i][1]}, cam_yaw, normal);
+                    rot2d((vec2){ node->item.polygon.planes[i][0], -node->item.polygon.planes[i][1] }, cam_yaw, normal);
 
                     vec3 t0, t1;
                     mat4MulVec3(map_mat, p0, t0);
@@ -270,13 +334,26 @@ int main(int argc, char *argv[]) {
             }
             setPixel(SCREEN_WIDTH_HALF, SCREEN_HEIGHT_HALF, COLOR_WHITE);
             setPixel(SCREEN_WIDTH_HALF + 1, SCREEN_HEIGHT_HALF + 1, COLOR_GREEN);
+
+            // vec2 near[2] = {
+            //     {sw[0] + SCREEN_WIDTH_HALF, sw[2] + SCREEN_HEIGHT_HALF},
+            //     {se[0] + SCREEN_WIDTH_HALF, se[2] + SCREEN_HEIGHT_HALF},
+            // };
+
+            // vec2 f_dir[2] = {
+            //     {-view_frustum.planes[0][1], view_frustum.planes[0][0]},
+            //     {view_frustum.planes[1][1], -view_frustum.planes[1][0]},
+            // };
+
+            // drawLine(near[0][0], near[0][1], near[0][0] + f_dir[0][0] * 50, near[0][1] - f_dir[0][1] * 50, COLOR_GREEN);
+            // drawLine(near[1][0], near[1][1], near[1][0] + f_dir[1][0] * 50, near[1][1] - f_dir[1][1] * 50, COLOR_GREEN);
         }
 
-        snprintf(print_buffer, sizeof(print_buffer), "{%6.3f, %6.3f, %6.3f}", cam_pos[0], cam_pos[1], cam_pos[2]);
+        snprintf(print_buffer, sizeof(print_buffer), "%6.3f %6.3f %6.3f", cam_pos[0], cam_pos[1], cam_pos[2]);
         renderText(print_buffer, 0, 0, COLOR_WHITE, main_font, main_font_char_width);
 
-        renderText("LightWare " STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR), 0, SCREEN_HEIGHT - main_font.height + 1, RGB(255, 200, 10), main_font, main_font_char_width);
-        renderText("LightWare " STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR), 0, SCREEN_HEIGHT - main_font.height, RGB(20, 60, 120), main_font, main_font_char_width);
+        renderText(TITLE_STRING, 0, SCREEN_HEIGHT - main_font.height + 1, RGB(255, 200, 10), main_font, main_font_char_width);
+        renderText(TITLE_STRING, 0, SCREEN_HEIGHT - main_font.height, RGB(20, 60, 120), main_font, main_font_char_width);
         SDL_UnlockTexture(screen_texture);
         SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
         SDL_RenderPresent(renderer);

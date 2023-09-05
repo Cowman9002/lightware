@@ -19,7 +19,8 @@
 #define FAR_PLANE 100.0f
 #define NEAR_PLANE 0.1f
 
-#define FLOAT_TO_DEPTH(z) ((z / FAR_PLANE) * (uint16_t)(~0))
+// #define FOV (70.0 * TO_RADS)
+#define FOV (90.0 * TO_RADS)
 
 typedef struct Image {
     Color *data;

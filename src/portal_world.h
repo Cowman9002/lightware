@@ -2,6 +2,10 @@
 
 #include "mathlib.h"
 
+typedef struct Frustum {
+    vec4 planes[6];
+}Frustum;
+
 typedef struct Sector Sector;
 // polygon defined counter-clockwise by standard
 typedef struct SectorPoly{
@@ -28,4 +32,4 @@ void freeSectorPoly(SectorPoly poly);
 void freeSector(Sector sector);
 void freePortalWorld(PortalWorld pod);
 
-void portalWorldRender(PortalWorld pod, mat4 vp_matrix, vec3 cam_pos);
+void portalWorldRender(PortalWorld pod, mat4 vp_matrix, vec3 cam_pos, Frustum frustum);

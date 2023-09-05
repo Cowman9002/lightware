@@ -1,5 +1,6 @@
 #include "geo.h"
 #include <stdlib.h>
+#include <stdio.h>
 
 bool pointInPoly(Line *lines, unsigned num_lines, vec2 point) {
     vec2 ray[2] = { { point[0], point[1] }, { point[0] - 1.0f, point[1] } };
@@ -38,6 +39,40 @@ bool pointInConvexPoly(vec2 *vertices, unsigned num_vertices, vec2 point) {
         if (cross32d(a, b, point) > 0.0f) return false;
     }
 
+    return true;
+}
+
+bool intersectSegmentPlane(vec3 line[2], vec4 plane, float *o_t) {
+    vec3 p0 = {
+        plane[0] * plane[3],
+        plane[1] * plane[3],
+        plane[2] * plane[3],
+    };
+
+    vec3 l = {
+        line[1][0] - line[0][0],
+        line[1][1] - line[0][1],
+        line[1][2] - line[0][2],
+    };
+
+    float denom = dot3d(l, plane);
+    if (denom == 0) return false;
+    float s = signum(denom);
+
+    vec3 num0 = {
+        p0[0] - line[0][0],
+        p0[1] - line[0][1],
+        p0[2] - line[0][2],
+    };
+
+    float d = dot3d(num0, plane) * s;
+    denom *= s;
+
+    if (d < 0.0f || d > denom) return false;
+
+    if (o_t != NULL) {
+        *o_t = d / denom;
+    }
     return true;
 }
 

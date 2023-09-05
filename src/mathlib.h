@@ -27,6 +27,7 @@ float normalize2d(vec2 a);
 void rot2d(vec2 a, float r, vec2 o);
 
 float dot3d(vec3 a, vec3 b);
+void cross3d(vec3 a, vec3 b, vec3 o);
 float dist3d(vec3 a, vec3 b);
 float normalized3d(vec3 a, vec3 o);
 float normalize3d(vec3 a);

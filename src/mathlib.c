@@ -53,6 +53,12 @@ float dot3d(vec3 a, vec3 b) {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
+void cross3d(vec3 a, vec3 b, vec3 o) {
+    o[0] = a[1] * b[2] - a[2] * b[1];
+    o[1] = a[2] * b[0] - a[0] * b[2];
+    o[2] = a[0] * b[1] - a[1] * b[0];
+}
+
 float dist3d(vec3 a, vec3 b) {
     vec3 diff      = { a[0] - b[0], a[1] - b[1], a[2] - b[2] };
     float sqr_dist = dot3d(diff, diff);

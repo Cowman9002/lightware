@@ -80,8 +80,11 @@ int main(int argc, char *argv[]) {
     float delta;
     float seconds;
 
-    uint64_t next_fps_print = 1000;
+    // uint64_t next_fps_print = 1000;
+    const unsigned FPS_PRINT_INTERVAL = 100;
+    uint64_t next_fps_print = FPS_PRINT_INTERVAL;
     unsigned last_fps_frame = 0;
+    unsigned fps_print_val  = 0;
 
     /////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////
@@ -102,30 +105,30 @@ int main(int argc, char *argv[]) {
     SectorList_init(&pod.sectors);
     {
         Sector sector;
-        sector.ceiling_height       = 5.0f;
-        sector.floor_height         = 0.0f;
-        sector.polygon.num_points   = 4;
-        sector.polygon.points       = malloc(sector.polygon.num_points * sizeof(*sector.polygon.points));
-        sector.polygon.planes       = malloc(sector.polygon.num_points * sizeof(*sector.polygon.planes));
-        sector.polygon.next_sectors = malloc(sector.polygon.num_points * sizeof(*sector.polygon.next_sectors));
+        SectorDef sub_sector;
 
-        for (unsigned i = 0; i < sector.polygon.num_points; ++i) {
-            sector.polygon.next_sectors[i] = NULL;
+        sector.num_walls    = 4;
+        sector.points       = malloc(sector.num_walls * sizeof(*sector.points));
+        sector.planes       = malloc(sector.num_walls * sizeof(*sector.planes));
+        sector.next_sectors = malloc(sector.num_walls * sizeof(*sector.next_sectors));
+
+        for (unsigned i = 0; i < sector.num_walls; ++i) {
+            sector.next_sectors[i] = NULL;
         }
 
-        sector.polygon.points[0][0] = -10.0f, sector.polygon.points[0][1] = -10.0f;
-        sector.polygon.points[1][0] = 10.0f, sector.polygon.points[1][1] = -10.0f;
-        sector.polygon.points[2][0] = 20.0f, sector.polygon.points[2][1] = 20.0f;
-        sector.polygon.points[3][0] = -10.0f, sector.polygon.points[3][1] = 10.0f;
+        sector.points[0][0] = -10.0f, sector.points[0][1] = -10.0f;
+        sector.points[1][0] = 10.0f, sector.points[1][1] = -10.0f;
+        sector.points[2][0] = 20.0f, sector.points[2][1] = 20.0f;
+        sector.points[3][0] = -10.0f, sector.points[3][1] = 10.0f;
 
         // precalc the planes
-        for (unsigned i = 0; i < sector.polygon.num_points; ++i) {
-            unsigned j = (i + 1) % sector.polygon.num_points;
+        for (unsigned i = 0; i < sector.num_walls; ++i) {
+            unsigned j = (i + 1) % sector.num_walls;
             vec3 p0 = { 0 }, p1 = { 0 };
-            p0[0] = sector.polygon.points[i][0];
-            p0[1] = sector.polygon.points[i][1];
-            p1[0] = sector.polygon.points[j][0];
-            p1[1] = sector.polygon.points[j][1];
+            p0[0] = sector.points[i][0];
+            p0[1] = sector.points[i][1];
+            p1[0] = sector.points[j][0];
+            p1[1] = sector.points[j][1];
 
             vec2 normal;
             normal[0] = -(p1[1] - p0[1]);
@@ -134,43 +137,48 @@ int main(int argc, char *argv[]) {
 
             float d = dot2d(normal, p0);
 
-            sector.polygon.planes[i][0] = normal[0];
-            sector.polygon.planes[i][1] = normal[1];
-            sector.polygon.planes[i][2] = 0.0f;
-            sector.polygon.planes[i][3] = d;
+            sector.planes[i][0] = normal[0];
+            sector.planes[i][1] = normal[1];
+            sector.planes[i][2] = 0.0f;
+            sector.planes[i][3] = d;
         }
+
+        sub_sector.ceiling_height = 30.0f;
+        sub_sector.floor_height   = 0.0f;
+
+        sector.num_sub_sectors = 1;
+        sector.sub_sectors     = malloc(sector.num_sub_sectors * sizeof(*sector.sub_sectors));
+
+        sector.sub_sectors[0] = sub_sector;
 
         SectorList_push_back(&pod.sectors, sector);
     }
 
     {
         Sector sector;
-        sector.ceiling_height       = 10.0f;
-        sector.floor_height         = 1.0f;
-        sector.polygon.num_points   = 4;
-        sector.polygon.points       = malloc(sector.polygon.num_points * sizeof(*sector.polygon.points));
-        sector.polygon.planes       = malloc(sector.polygon.num_points * sizeof(*sector.polygon.planes));
-        sector.polygon.next_sectors = malloc(sector.polygon.num_points * sizeof(*sector.polygon.next_sectors));
 
-        for (unsigned i = 0; i < sector.polygon.num_points; ++i) {
-            sector.polygon.next_sectors[i] = NULL;
+        sector.num_walls    = 4;
+        sector.points       = malloc(sector.num_walls * sizeof(*sector.points));
+        sector.planes       = malloc(sector.num_walls * sizeof(*sector.planes));
+        sector.next_sectors = malloc(sector.num_walls * sizeof(*sector.next_sectors));
+
+        for (unsigned i = 0; i < sector.num_walls; ++i) {
+            sector.next_sectors[i] = NULL;
         }
 
-        // clang-format off
-        sector.polygon.points[0][0] = -10.0f, sector.polygon.points[0][1] = 10.0f;
-        sector.polygon.points[1][0] = 20.0f, sector.polygon.points[1][1] = 20.0f;
-        sector.polygon.points[2][0] = 20.0f,  sector.polygon.points[2][1] = 40.0f;
-        sector.polygon.points[3][0] = -20.0f,  sector.polygon.points[3][1] = 50.0f;
-        // clang-format on
+        sector.points[0][0] = -10.0f, sector.points[0][1] = 10.0f;
+        sector.points[1][0] = 20.0f, sector.points[1][1] = 20.0f;
+        sector.points[2][0] = 20.0f, sector.points[2][1] = 40.0f;
+        sector.points[3][0] = -20.0f, sector.points[3][1] = 50.0f;
 
         // precalc the planes
-        for (unsigned i = 0; i < sector.polygon.num_points; ++i) {
-            unsigned j = (i + 1) % sector.polygon.num_points;
+        for (unsigned i = 0; i < sector.num_walls; ++i) {
+            unsigned j = (i + 1) % sector.num_walls;
             vec3 p0 = { 0 }, p1 = { 0 };
-            p0[0] = sector.polygon.points[i][0];
-            p0[1] = sector.polygon.points[i][1];
-            p1[0] = sector.polygon.points[j][0];
-            p1[1] = sector.polygon.points[j][1];
+            p0[0] = sector.points[i][0];
+            p0[1] = sector.points[i][1];
+            p1[0] = sector.points[j][0];
+            p1[1] = sector.points[j][1];
 
             vec2 normal;
             normal[0] = -(p1[1] - p0[1]);
@@ -179,24 +187,37 @@ int main(int argc, char *argv[]) {
 
             float d = dot2d(normal, p0);
 
-            sector.polygon.planes[i][0] = normal[0];
-            sector.polygon.planes[i][1] = normal[1];
-            sector.polygon.planes[i][2] = 0.0f;
-            sector.polygon.planes[i][3] = d;
+            sector.planes[i][0] = normal[0];
+            sector.planes[i][1] = normal[1];
+            sector.planes[i][2] = 0.0f;
+            sector.planes[i][3] = d;
         }
+        
+        SectorDef sub_sector;
+
+        sector.num_sub_sectors = 2;
+        sector.sub_sectors     = malloc(sector.num_sub_sectors * sizeof(*sector.sub_sectors));
+
+        sub_sector.floor_height   = 1.0f;
+        sub_sector.ceiling_height = 8.0f;
+        sector.sub_sectors[0] = sub_sector;
+
+        sub_sector.floor_height   = 10.0f;
+        sub_sector.ceiling_height = 18.0f;
+        sector.sub_sectors[1] = sub_sector;
 
         SectorList_push_back(&pod.sectors, sector);
     }
 
-    pod.sectors.head->item.polygon.next_sectors[2]       = &pod.sectors.head->next->item;
-    pod.sectors.head->next->item.polygon.next_sectors[0] = &pod.sectors.head->item;
+    pod.sectors.head->item.next_sectors[2]       = &pod.sectors.head->next->item;
+    pod.sectors.head->next->item.next_sectors[0] = &pod.sectors.head->item;
 
     mat4 tmp_mat[16];
 
     Camera cam = {
-        .pos = {0.0f, 0.0f, 1.65f},
+        .pos   = { 0.0f, 0.0f, 1.65f },
         .pitch = 0.0f,
-        .yaw = 0.0f,
+        .yaw   = 0.0f,
     };
 
     mat4Perspective(FOV, ASPECT_RATIO, NEAR_PLANE, FAR_PLANE, cam.proj_mat);
@@ -218,11 +239,11 @@ int main(int argc, char *argv[]) {
         delta      = (float)(ticks - last_ticks) / 1000.0f;
         last_ticks = ticks;
 
-        if (ticks >= next_fps_print) {
-            next_fps_print += 1000;
-            printf("FPS: %4u   MS: %f\n", frame - last_fps_frame, 1.0 / (frame - last_fps_frame));
-            last_fps_frame = frame;
-        }
+        // if (ticks >= next_fps_print) {
+        //     next_fps_print += 1000;
+        //     printf("FPS: %4u   MS: %f\n", frame - last_fps_frame, 1.0 / (frame - last_fps_frame));
+        //     last_fps_frame = frame;
+        // }
 
         for (unsigned i = 0; i < SDL_NUM_SCANCODES; ++i) {
             last_keys[i] = keys[i];
@@ -261,9 +282,11 @@ int main(int argc, char *argv[]) {
 
             cam.sector = getSector(pod, cam.pos);
 
-            if(cam.sector != NULL) {
-                cam.sector->floor_height += (keys[SDL_SCANCODE_R] - keys[SDL_SCANCODE_E]) * delta;
-                cam.sector->ceiling_height += (keys[SDL_SCANCODE_Y] - keys[SDL_SCANCODE_T]) * delta;
+            if (cam.sector != NULL) {
+                cam.sub_sector = getSubSector(cam.sector, cam.pos);
+
+                cam.sector->sub_sectors[cam.sub_sector].floor_height += (keys[SDL_SCANCODE_R] - keys[SDL_SCANCODE_E]) * delta;
+                cam.sector->sub_sectors[cam.sub_sector].ceiling_height += (keys[SDL_SCANCODE_Y] - keys[SDL_SCANCODE_T]) * delta;
             }
         }
 
@@ -302,16 +325,16 @@ int main(int argc, char *argv[]) {
         {
             SectorListNode *node = pod.sectors.head;
             while (node != NULL) {
-                for (unsigned i = 0; i < node->item.polygon.num_points; ++i) {
-                    unsigned j = (i + 1) % node->item.polygon.num_points;
+                for (unsigned i = 0; i < node->item.num_walls; ++i) {
+                    unsigned j = (i + 1) % node->item.num_walls;
                     vec3 p0 = { 0 }, p1 = { 0 };
-                    p0[0] = node->item.polygon.points[i][0];
-                    p0[1] = node->item.polygon.points[i][1];
-                    p1[0] = node->item.polygon.points[j][0];
-                    p1[1] = node->item.polygon.points[j][1];
+                    p0[0] = node->item.points[i][0];
+                    p0[1] = node->item.points[i][1];
+                    p1[0] = node->item.points[j][0];
+                    p1[1] = node->item.points[j][1];
 
                     vec2 normal;
-                    rot2d((vec2){ node->item.polygon.planes[i][0], -node->item.polygon.planes[i][1] }, cam.yaw, normal);
+                    rot2d((vec2){ node->item.planes[i][0], -node->item.planes[i][1] }, cam.yaw, normal);
 
                     vec3 t0, t1;
                     mat4MulVec3(map_mat, p0, t0);
@@ -320,7 +343,7 @@ int main(int argc, char *argv[]) {
                     vec2 avg = { (t0[0] + t1[0]) * 0.5f, (t0[1] + t1[1]) * 0.5f };
 
                     Color highlight, shadow;
-                    if (node->item.polygon.next_sectors[i] == NULL) {
+                    if (node->item.next_sectors[i] == NULL) {
                         highlight = COLOR_WHITE;
                         shadow    = RGB(50, 50, 60);
                     } else {
@@ -332,15 +355,15 @@ int main(int argc, char *argv[]) {
                     drawLine(t0[0] + 1, t0[1] + 1, t1[0] + 1, t1[1] + 1, shadow);
                     drawLine(t0[0], t0[1], t1[0], t1[1], highlight);
 
-                    if (node->item.polygon.next_sectors[i] != NULL) {
-                        Sector *next = node->item.polygon.next_sectors[i];
+                    if (node->item.next_sectors[i] != NULL) {
+                        Sector *next = node->item.next_sectors[i];
                         vec3 center  = { 0.0f };
-                        for (unsigned n = 0; n < next->polygon.num_points; ++n) {
-                            center[0] += next->polygon.points[n][0];
-                            center[1] += next->polygon.points[n][1];
+                        for (unsigned n = 0; n < next->num_walls; ++n) {
+                            center[0] += next->points[n][0];
+                            center[1] += next->points[n][1];
                         }
-                        center[0] /= next->polygon.num_points;
-                        center[1] /= next->polygon.num_points;
+                        center[0] /= next->num_walls;
+                        center[1] /= next->num_walls;
 
                         vec3 c;
                         mat4MulVec3(map_mat, center, c);
@@ -358,10 +381,31 @@ int main(int argc, char *argv[]) {
         }
 
         snprintf(print_buffer, sizeof(print_buffer), "%6.3f %6.3f %6.3f", cam.pos[0], cam.pos[1], cam.pos[2]);
-        renderText(print_buffer, 0, 0, COLOR_WHITE, main_font, main_font_char_width);
+        renderText(print_buffer, 9, 0, COLOR_WHITE, main_font, main_font_char_width);
 
-        renderText(TITLE_STRING, 0, SCREEN_HEIGHT - main_font.height + 1, RGB(255, 200, 10), main_font, main_font_char_width);
-        renderText(TITLE_STRING, 0, SCREEN_HEIGHT - main_font.height, RGB(20, 60, 120), main_font, main_font_char_width);
+        if (cam.sector != NULL) {
+            SectorDef def = cam.sector->sub_sectors[cam.sub_sector];
+            snprintf(print_buffer, sizeof(print_buffer), "%6.3f %6.3f", def.floor_height, def.ceiling_height);
+            renderText(print_buffer, 9, 16 * 1, COLOR_WHITE, main_font, main_font_char_width);
+
+            snprintf(print_buffer, sizeof(print_buffer), "SSID: %u", cam.sub_sector);
+            renderText(print_buffer, 9, 16 * 2, COLOR_WHITE, main_font, main_font_char_width);
+        }
+
+        if (ticks >= next_fps_print) {
+            next_fps_print += FPS_PRINT_INTERVAL;
+            fps_print_val  = frame - last_fps_frame;
+            last_fps_frame = frame;
+        }
+
+        snprintf(print_buffer, sizeof(print_buffer), "%5.1f FPS", fps_print_val / (FPS_PRINT_INTERVAL / 1000.0f));
+        renderText(print_buffer, SCREEN_WIDTH - 170, SCREEN_HEIGHT - main_font.height + 1, RGB(100, 255, 10), main_font, main_font_char_width);
+
+        snprintf(print_buffer, sizeof(print_buffer), "%5.3fms", ((float)FPS_PRINT_INTERVAL) / fps_print_val);
+        renderText(print_buffer, SCREEN_WIDTH - 70, SCREEN_HEIGHT - main_font.height + 1, RGB(100, 255, 10), main_font, main_font_char_width);
+
+        renderText(TITLE_STRING, 9, SCREEN_HEIGHT - main_font.height + 1, RGB(255, 200, 10), main_font, main_font_char_width);
+        renderText(TITLE_STRING, 9, SCREEN_HEIGHT - main_font.height, RGB(20, 60, 120), main_font, main_font_char_width);
         SDL_UnlockTexture(screen_texture);
         SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
         SDL_RenderPresent(renderer);

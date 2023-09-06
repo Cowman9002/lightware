@@ -5,6 +5,8 @@
 typedef struct Sector Sector;
 typedef struct Camera {
     Sector *sector;
+    unsigned sub_sector;
+
     vec3 pos;
     float yaw, pitch;
 

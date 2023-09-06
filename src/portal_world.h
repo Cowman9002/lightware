@@ -4,18 +4,21 @@
 #include "camera.h"
 
 typedef struct Sector Sector;
-// polygon defined counter-clockwise by standard
-typedef struct SectorPoly{
-    size_t num_points;
-    vec2 *points;
-    vec4 *planes;
-    Sector **next_sectors;
-}SectorPoly;
+typedef struct SectorDef {
+    float floor_height, ceiling_height;
+} SectorDef;
 
 typedef struct Sector {
-    SectorPoly polygon;
-    float floor_height, ceiling_height;
-}Sector;
+    //  polygon all sub-sectors will use
+    unsigned num_walls;
+    vec2 *points; // list
+    vec4 *planes; // list
+    Sector **next_sectors; // list
+
+    // definitions of sub sectors for sector over sector
+    unsigned num_sub_sectors;
+    SectorDef *sub_sectors; // list
+} Sector;
 
 #define LIST_TAG SectorList
 #define LIST_ITEM_TYPE Sector
@@ -23,13 +26,14 @@ typedef struct Sector {
 
 typedef struct PortalWorld {
     SectorList sectors;
-}PortalWorld;
+} PortalWorld;
 
-void freeSectorPoly(SectorPoly poly);
+void freeSectorDef(SectorDef def);
 void freeSector(Sector sector);
 void freePortalWorld(PortalWorld pod);
 
 bool pointInSector(Sector sector, vec3 point);
 Sector *getSector(PortalWorld pod, vec3 point);
+unsigned getSubSector(Sector *sector, vec3 point);
 
 void portalWorldRender(PortalWorld pod, Camera camera);

@@ -4,7 +4,7 @@
 #include "color.h"
 #include <stdbool.h>
 
-#define RESOLUTION_DIVISOR 2
+#define RESOLUTION_DIVISOR 1
 #define SCREEN_WIDTH (640 / RESOLUTION_DIVISOR)
 #define SCREEN_HEIGHT (480 / RESOLUTION_DIVISOR)
 #define PIXEL_SIZE (2 * RESOLUTION_DIVISOR)

@@ -1,5 +1,10 @@
+[x] Render sector
+[x] Portal clipping
+[x] Sector over sector
+[ ] Map file loading and saving
 [ ] Convert main engine to dll
 [ ] Create level editor
+[ ] Polygon filling
 [ ] Integrated lighting
 [ ] Skybox
 [ ] 2D directional sprites

@@ -11,7 +11,7 @@ CFLAGS := -DVERSION_MAJOR=0 -DVERSION_MINOR=1 -static-libgcc -Iinclude -Llib -Wa
 default: $(TARGET)
 all: default
 
-SOURCES = src/main.c src/lodepng.c src/draw.c src/color.c src/geo.c src/mathlib.c src/portal_world.c
+SOURCES = src/main.c src/lodepng.c src/draw.c src/color.c src/geo.c src/mathlib.c src/portal_world.c src/camera.c
 OBJECTS = $(patsubst %.c, obj/%.o, $(SOURCES))
 HEADERS = $(wildcard *.h)
 

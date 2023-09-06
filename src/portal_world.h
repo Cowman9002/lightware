@@ -1,10 +1,7 @@
 #pragma once
 
 #include "mathlib.h"
-
-typedef struct Frustum {
-    vec4 planes[6];
-}Frustum;
+#include "camera.h"
 
 typedef struct Sector Sector;
 // polygon defined counter-clockwise by standard
@@ -33,5 +30,6 @@ void freeSector(Sector sector);
 void freePortalWorld(PortalWorld pod);
 
 bool pointInSector(Sector sector, vec3 point);
+Sector *getSector(PortalWorld pod, vec3 point);
 
-void portalWorldRender(PortalWorld pod, mat4 vp_matrix, vec3 cam_pos, Frustum frustum);
+void portalWorldRender(PortalWorld pod, Camera camera);

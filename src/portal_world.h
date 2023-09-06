@@ -32,4 +32,6 @@ void freeSectorPoly(SectorPoly poly);
 void freeSector(Sector sector);
 void freePortalWorld(PortalWorld pod);
 
+bool pointInSector(Sector sector, vec3 point);
+
 void portalWorldRender(PortalWorld pod, mat4 vp_matrix, vec3 cam_pos, Frustum frustum);

@@ -112,11 +112,54 @@ int main(int argc, char *argv[]) {
             sector.polygon.next_sectors[i] = NULL;
         }
 
+        sector.polygon.points[0][0] = -10.0f, sector.polygon.points[0][1] = -10.0f;
+        sector.polygon.points[1][0] = 10.0f, sector.polygon.points[1][1] = -10.0f;
+        sector.polygon.points[2][0] = 20.0f, sector.polygon.points[2][1] = 20.0f;
+        sector.polygon.points[3][0] = -10.0f, sector.polygon.points[3][1] = 10.0f;
+
+        // precalc the planes
+        for (unsigned i = 0; i < sector.polygon.num_points; ++i) {
+            unsigned j = (i + 1) % sector.polygon.num_points;
+            vec3 p0 = { 0 }, p1 = { 0 };
+            p0[0] = sector.polygon.points[i][0];
+            p0[1] = sector.polygon.points[i][1];
+            p1[0] = sector.polygon.points[j][0];
+            p1[1] = sector.polygon.points[j][1];
+
+            vec2 normal;
+            normal[0] = -(p1[1] - p0[1]);
+            normal[1] = (p1[0] - p0[0]);
+            normalize2d(normal);
+
+            float d = dot2d(normal, p0);
+
+            sector.polygon.planes[i][0] = normal[0];
+            sector.polygon.planes[i][1] = normal[1];
+            sector.polygon.planes[i][2] = 0.0f;
+            sector.polygon.planes[i][3] = d;
+        }
+
+        SectorList_push_back(&pod.sectors, sector);
+    }
+
+    {
+        Sector sector;
+        sector.ceiling_height       = 10.0f;
+        sector.floor_height         = 1.0f;
+        sector.polygon.num_points   = 4;
+        sector.polygon.points       = malloc(sector.polygon.num_points * sizeof(*sector.polygon.points));
+        sector.polygon.planes       = malloc(sector.polygon.num_points * sizeof(*sector.polygon.planes));
+        sector.polygon.next_sectors = malloc(sector.polygon.num_points * sizeof(*sector.polygon.next_sectors));
+
+        for (unsigned i = 0; i < sector.polygon.num_points; ++i) {
+            sector.polygon.next_sectors[i] = NULL;
+        }
+
         // clang-format off
-        sector.polygon.points[0][0] = -10.0f; sector.polygon.points[0][1] = -10.0f;
-        sector.polygon.points[1][0] = 10.0f; sector.polygon.points[1][1] = -10.0f;
-        sector.polygon.points[2][0] = 20.0f;  sector.polygon.points[2][1] = 20.0f;
-        sector.polygon.points[3][0] = -10.0f;  sector.polygon.points[3][1] = 10.0f;
+        sector.polygon.points[0][0] = -10.0f, sector.polygon.points[0][1] = 10.0f;
+        sector.polygon.points[1][0] = 20.0f, sector.polygon.points[1][1] = 20.0f;
+        sector.polygon.points[2][0] = 20.0f,  sector.polygon.points[2][1] = 40.0f;
+        sector.polygon.points[3][0] = -20.0f,  sector.polygon.points[3][1] = 50.0f;
         // clang-format on
 
         // precalc the planes
@@ -144,9 +187,12 @@ int main(int argc, char *argv[]) {
         SectorList_push_back(&pod.sectors, sector);
     }
 
+    pod.sectors.head->item.polygon.next_sectors[2]       = &pod.sectors.head->next->item;
+    pod.sectors.head->next->item.polygon.next_sectors[0] = &pod.sectors.head->item;
+
     mat4 tmp_mat[16];
 
-    vec3 cam_pos  = { 0.0f, -30.0f, 1.65f };
+    vec3 cam_pos  = { 0.0f, 0.0f, 1.65f };
     float cam_yaw = 0.0f, cam_pitch = 0.0f;
 
     mat4 proj_mat;
@@ -248,59 +294,53 @@ int main(int argc, char *argv[]) {
         }
 
         {
-            const float half_v        = FAR_PLANE * tanf(FOV * .5f);
-            const float half_h        = half_v * ASPECT_RATIO;
+            const float half_v = FAR_PLANE * tanf(FOV * .5f);
+            const float half_h = half_v * ASPECT_RATIO;
             vec3 cam_front, cam_right, cam_up, cam_front_far;
-            mat4MulVec3(frustum_matrix, (vec3){1.0f, 0.0f, 0.0f}, cam_right);
-            mat4MulVec3(frustum_matrix, (vec3){0.0f, 1.0f, 0.0f}, cam_front);
-            mat4MulVec3(frustum_matrix, (vec3){0.0f, 0.0f, 1.0f}, cam_up);
-            for(unsigned _x = 0; _x < 3; ++_x) cam_front_far[_x] = cam_front[_x] * FAR_PLANE;
+            mat4MulVec3(frustum_matrix, (vec3){ 1.0f, 0.0f, 0.0f }, cam_right);
+            mat4MulVec3(frustum_matrix, (vec3){ 0.0f, 1.0f, 0.0f }, cam_front);
+            mat4MulVec3(frustum_matrix, (vec3){ 0.0f, 0.0f, 1.0f }, cam_up);
+            for (unsigned _x = 0; _x < 3; ++_x)
+                cam_front_far[_x] = cam_front[_x] * FAR_PLANE;
 
             vec3 tmp_vec[2];
 
-            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[0][_x] = cam_right[_x] * half_h;
-            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[1][_x] = cam_front_far[_x] - tmp_vec[0][_x];
+            for (unsigned _x = 0; _x < 3; ++_x)
+                tmp_vec[0][_x] = cam_right[_x] * half_h;
+            for (unsigned _x = 0; _x < 3; ++_x)
+                tmp_vec[1][_x] = cam_front_far[_x] - tmp_vec[0][_x];
             cross3d(tmp_vec[1], cam_up, view_frustum.planes[0]);
 
-            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[0][_x] = cam_right[_x] * half_h;
-            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[1][_x] = cam_front_far[_x] + tmp_vec[0][_x];
+            for (unsigned _x = 0; _x < 3; ++_x)
+                tmp_vec[0][_x] = cam_right[_x] * half_h;
+            for (unsigned _x = 0; _x < 3; ++_x)
+                tmp_vec[1][_x] = cam_front_far[_x] + tmp_vec[0][_x];
             cross3d(cam_up, tmp_vec[1], view_frustum.planes[1]);
 
-            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[0][_x] = cam_up[_x] * half_v;
-            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[1][_x] = cam_front_far[_x] - tmp_vec[0][_x];
+            for (unsigned _x = 0; _x < 3; ++_x)
+                tmp_vec[0][_x] = cam_up[_x] * half_v;
+            for (unsigned _x = 0; _x < 3; ++_x)
+                tmp_vec[1][_x] = cam_front_far[_x] - tmp_vec[0][_x];
             cross3d(cam_right, tmp_vec[1], view_frustum.planes[2]);
 
-            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[0][_x] = cam_up[_x] * half_v;
-            for(unsigned _x = 0; _x < 3; ++_x) tmp_vec[1][_x] = cam_front_far[_x] + tmp_vec[0][_x];
+            for (unsigned _x = 0; _x < 3; ++_x)
+                tmp_vec[0][_x] = cam_up[_x] * half_v;
+            for (unsigned _x = 0; _x < 3; ++_x)
+                tmp_vec[1][_x] = cam_front_far[_x] + tmp_vec[0][_x];
             cross3d(tmp_vec[1], cam_right, view_frustum.planes[3]);
-            
-            for(unsigned _x = 0; _x < 3; ++_x) view_frustum.planes[4][_x] = cam_front[_x];
-            for(unsigned _x = 0; _x < 3; ++_x) view_frustum.planes[5][_x] = -cam_front[_x];
 
-            for(unsigned i = 0; i < 6; ++i) {  
+            for (unsigned _x = 0; _x < 3; ++_x)
+                view_frustum.planes[4][_x] = cam_front[_x];
+            for (unsigned _x = 0; _x < 3; ++_x)
+                view_frustum.planes[5][_x] = -cam_front[_x];
+
+            for (unsigned i = 0; i < 6; ++i) {
                 normalize3d(view_frustum.planes[i]);
                 view_frustum.planes[i][3] = dot3d(view_frustum.planes[i], cam_pos);
             }
 
             view_frustum.planes[4][3] += NEAR_PLANE;
             view_frustum.planes[5][3] += -FAR_PLANE;
-
-            // frustum.rightFace  = { cam.Position,
-            //                       glm::cross(frontMultFar - cam.Right * halfHSide, cam.Up) };
-            // frustum.leftFace   = { cam.Position,
-            //                      glm::cross(cam.Up, frontMultFar + cam.Right * halfHSide) };
-            // frustum.topFace    = { cam.Position,
-            //                     glm::cross(cam.Right, frontMultFar - cam.Up * halfVSide) };
-            // frustum.bottomFace = { cam.Position,
-            //                        glm::cross(frontMultFar + cam.Up * halfVSide, cam.Right) };
-            // frustum.nearFace   = { cam.Position + zNear * cam.Front, cam.Front };
-            // frustum.farFace    = { cam.Position + frontMultFar, -cam.Front };
-
-
-            // for(unsigned i = 0; i < 6; ++i) {
-            //     printf("%f, %f, %f %f\n", view_frustum.planes[i][0], view_frustum.planes[i][1], view_frustum.planes[i][2], view_frustum.planes[i][3]);
-            // }
-            // printf("\n");
         }
 
         portalWorldRender(pod, vp_mat, cam_pos, view_frustum);
@@ -324,29 +364,44 @@ int main(int argc, char *argv[]) {
                     mat4MulVec3(map_mat, p0, t0);
                     mat4MulVec3(map_mat, p1, t1);
 
-                    drawLine(t0[0] + 1, t0[1] + 1, t1[0] + 1, t1[1] + 1, COLOR_RED);
-                    drawLine(t0[0], t0[1], t1[0], t1[1], COLOR_WHITE);
-
                     vec2 avg = { (t0[0] + t1[0]) * 0.5f, (t0[1] + t1[1]) * 0.5f };
+
+                    Color highlight, shadow;
+                    if (node->item.polygon.next_sectors[i] == NULL) {
+                        highlight = COLOR_WHITE;
+                        shadow    = RGB(50, 50, 60);
+                    } else {
+                        highlight = RGB(255, 150, 255);
+                        shadow    = RGB(160, 50, 170);
+                    }
+
+                    // main wall
+                    drawLine(t0[0] + 1, t0[1] + 1, t1[0] + 1, t1[1] + 1, shadow);
+                    drawLine(t0[0], t0[1], t1[0], t1[1], highlight);
+
+                    if (node->item.polygon.next_sectors[i] != NULL) {
+                        Sector *next = node->item.polygon.next_sectors[i];
+                        vec3 center  = { 0.0f };
+                        for (unsigned n = 0; n < next->polygon.num_points; ++n) {
+                            center[0] += next->polygon.points[n][0];
+                            center[1] += next->polygon.points[n][1];
+                        }
+                        center[0] /= next->polygon.num_points;
+                        center[1] /= next->polygon.num_points;
+
+                        vec3 c;
+                        mat4MulVec3(map_mat, center, c);
+
+                        drawLine(avg[0], avg[1], c[0], c[1], highlight);
+                    }
+
+                    // normal
                     drawLine(avg[0], avg[1], avg[0] + normal[0] * map_scale * 2.0f, avg[1] + normal[1] * map_scale * 2.0f, COLOR_BLUE);
                 }
                 node = node->next;
             }
             setPixel(SCREEN_WIDTH_HALF, SCREEN_HEIGHT_HALF, COLOR_WHITE);
             setPixel(SCREEN_WIDTH_HALF + 1, SCREEN_HEIGHT_HALF + 1, COLOR_GREEN);
-
-            // vec2 near[2] = {
-            //     {sw[0] + SCREEN_WIDTH_HALF, sw[2] + SCREEN_HEIGHT_HALF},
-            //     {se[0] + SCREEN_WIDTH_HALF, se[2] + SCREEN_HEIGHT_HALF},
-            // };
-
-            // vec2 f_dir[2] = {
-            //     {-view_frustum.planes[0][1], view_frustum.planes[0][0]},
-            //     {view_frustum.planes[1][1], -view_frustum.planes[1][0]},
-            // };
-
-            // drawLine(near[0][0], near[0][1], near[0][0] + f_dir[0][0] * 50, near[0][1] - f_dir[0][1] * 50, COLOR_GREEN);
-            // drawLine(near[1][0], near[1][1], near[1][0] + f_dir[1][0] * 50, near[1][1] - f_dir[1][1] * 50, COLOR_GREEN);
         }
 
         snprintf(print_buffer, sizeof(print_buffer), "%6.3f %6.3f %6.3f", cam_pos[0], cam_pos[1], cam_pos[2]);

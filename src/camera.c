@@ -73,15 +73,17 @@ Frustum calcFrustumFromPoly(vec3 *polygon, unsigned num_verts, Camera cam) {
         unsigned j = (i + 1) % num_verts;
 
         calcPlaneFromPoints(cam.pos, polygon[j], polygon[i], frustum.planes[i + 2]);
+        frustum.planes[i + 2][3] -= 0.003; // small offset to avoid issues when clipping walls that share points with portal
     }
 
-    // near plane
-    calcPlaneFromPoints(polygon[0], polygon[2], polygon[1], frustum.planes[FRUSTUM_NEAR_PLANE_INDEX]);
-
-    // far plane
     vec3 cam_front;
     mat4MulVec3(cam.rot_mat, (vec3){ 0.0f, 1.0f, 0.0f }, cam_front);
 
+    // near plane
+    calcPlaneFromPoints(polygon[0], polygon[2], polygon[1], frustum.planes[FRUSTUM_NEAR_PLANE_INDEX]);
+    frustum.planes[FRUSTUM_NEAR_PLANE_INDEX][3] -= 0.003;
+
+    // far plane
     for (unsigned _x = 0; _x < 3; ++_x)
         frustum.planes[FRUSTUM_FAR_PLANE_INDEX][_x] = -cam_front[_x];
 

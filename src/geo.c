@@ -65,7 +65,8 @@ bool intersectSegmentPlane(vec3 line[2], vec4 plane, float *o_t) {
         p0[2] - line[0][2],
     };
 
-    float d = dot3d(num0, plane) * s;
+    float d = dot3d(num0, plane);
+    d *= s;
     denom *= s;
 
     if (d < 0.0f || d > denom) return false;

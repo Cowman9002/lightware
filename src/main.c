@@ -101,116 +101,9 @@ int main(int argc, char *argv[]) {
 
     char print_buffer[128];
 
+    const char *const map_path = "res/maps/map0.map";
     PortalWorld pod;
-    SectorList_init(&pod.sectors);
-    {
-        Sector sector;
-        SectorDef sub_sector;
-
-        sector.num_walls    = 4;
-        sector.points       = malloc(sector.num_walls * sizeof(*sector.points));
-        sector.planes       = malloc(sector.num_walls * sizeof(*sector.planes));
-        sector.next_sectors = malloc(sector.num_walls * sizeof(*sector.next_sectors));
-
-        for (unsigned i = 0; i < sector.num_walls; ++i) {
-            sector.next_sectors[i] = NULL;
-        }
-
-        sector.points[0][0] = -10.0f, sector.points[0][1] = -10.0f;
-        sector.points[1][0] = 10.0f, sector.points[1][1] = -10.0f;
-        sector.points[2][0] = 20.0f, sector.points[2][1] = 20.0f;
-        sector.points[3][0] = -10.0f, sector.points[3][1] = 10.0f;
-
-        // precalc the planes
-        for (unsigned i = 0; i < sector.num_walls; ++i) {
-            unsigned j = (i + 1) % sector.num_walls;
-            vec3 p0 = { 0 }, p1 = { 0 };
-            p0[0] = sector.points[i][0];
-            p0[1] = sector.points[i][1];
-            p1[0] = sector.points[j][0];
-            p1[1] = sector.points[j][1];
-
-            vec2 normal;
-            normal[0] = -(p1[1] - p0[1]);
-            normal[1] = (p1[0] - p0[0]);
-            normalize2d(normal);
-
-            float d = dot2d(normal, p0);
-
-            sector.planes[i][0] = normal[0];
-            sector.planes[i][1] = normal[1];
-            sector.planes[i][2] = 0.0f;
-            sector.planes[i][3] = d;
-        }
-
-        sub_sector.ceiling_height = 30.0f;
-        sub_sector.floor_height   = 0.0f;
-
-        sector.num_sub_sectors = 1;
-        sector.sub_sectors     = malloc(sector.num_sub_sectors * sizeof(*sector.sub_sectors));
-
-        sector.sub_sectors[0] = sub_sector;
-
-        SectorList_push_back(&pod.sectors, sector);
-    }
-
-    {
-        Sector sector;
-
-        sector.num_walls    = 4;
-        sector.points       = malloc(sector.num_walls * sizeof(*sector.points));
-        sector.planes       = malloc(sector.num_walls * sizeof(*sector.planes));
-        sector.next_sectors = malloc(sector.num_walls * sizeof(*sector.next_sectors));
-
-        for (unsigned i = 0; i < sector.num_walls; ++i) {
-            sector.next_sectors[i] = NULL;
-        }
-
-        sector.points[0][0] = -10.0f, sector.points[0][1] = 10.0f;
-        sector.points[1][0] = 20.0f, sector.points[1][1] = 20.0f;
-        sector.points[2][0] = 20.0f, sector.points[2][1] = 40.0f;
-        sector.points[3][0] = -20.0f, sector.points[3][1] = 50.0f;
-
-        // precalc the planes
-        for (unsigned i = 0; i < sector.num_walls; ++i) {
-            unsigned j = (i + 1) % sector.num_walls;
-            vec3 p0 = { 0 }, p1 = { 0 };
-            p0[0] = sector.points[i][0];
-            p0[1] = sector.points[i][1];
-            p1[0] = sector.points[j][0];
-            p1[1] = sector.points[j][1];
-
-            vec2 normal;
-            normal[0] = -(p1[1] - p0[1]);
-            normal[1] = (p1[0] - p0[0]);
-            normalize2d(normal);
-
-            float d = dot2d(normal, p0);
-
-            sector.planes[i][0] = normal[0];
-            sector.planes[i][1] = normal[1];
-            sector.planes[i][2] = 0.0f;
-            sector.planes[i][3] = d;
-        }
-        
-        SectorDef sub_sector;
-
-        sector.num_sub_sectors = 2;
-        sector.sub_sectors     = malloc(sector.num_sub_sectors * sizeof(*sector.sub_sectors));
-
-        sub_sector.floor_height   = 1.0f;
-        sub_sector.ceiling_height = 8.0f;
-        sector.sub_sectors[0] = sub_sector;
-
-        sub_sector.floor_height   = 10.0f;
-        sub_sector.ceiling_height = 18.0f;
-        sector.sub_sectors[1] = sub_sector;
-
-        SectorList_push_back(&pod.sectors, sector);
-    }
-
-    pod.sectors.head->item.next_sectors[2]       = &pod.sectors.head->next->item;
-    pod.sectors.head->next->item.next_sectors[0] = &pod.sectors.head->item;
+    if(!loadPortalWorld(map_path, 5.0f, &pod)) return -2;
 
     mat4 tmp_mat[16];
 
@@ -257,6 +150,17 @@ int main(int argc, char *argv[]) {
         ////////////////////////////////////////////////
         //      UPDATE
         ////////////////////////////////////////////////
+
+        if(keys[SDL_SCANCODE_L] && !last_keys[SDL_SCANCODE_L]) {
+            PortalWorld tmp;
+            if(!loadPortalWorld(map_path, 5.0f, &tmp)) {
+                printf("Failed to reload %s\n", map_path);
+            } else {
+                freePortalWorld(pod);
+                pod = tmp;
+                printf("Reloaded map %s\n", map_path);
+            }
+        }
 
         {
             float input_h = keys[SDL_SCANCODE_D] - keys[SDL_SCANCODE_A];
@@ -355,21 +259,21 @@ int main(int argc, char *argv[]) {
                     drawLine(t0[0] + 1, t0[1] + 1, t1[0] + 1, t1[1] + 1, shadow);
                     drawLine(t0[0], t0[1], t1[0], t1[1], highlight);
 
-                    if (node->item.next_sectors[i] != NULL) {
-                        Sector *next = node->item.next_sectors[i];
-                        vec3 center  = { 0.0f };
-                        for (unsigned n = 0; n < next->num_walls; ++n) {
-                            center[0] += next->points[n][0];
-                            center[1] += next->points[n][1];
-                        }
-                        center[0] /= next->num_walls;
-                        center[1] /= next->num_walls;
+                    // if (node->item.next_sectors[i] != NULL) {
+                    //     Sector *next = node->item.next_sectors[i];
+                    //     vec3 center  = { 0.0f };
+                    //     for (unsigned n = 0; n < next->num_walls; ++n) {
+                    //         center[0] += next->points[n][0];
+                    //         center[1] += next->points[n][1];
+                    //     }
+                    //     center[0] /= next->num_walls;
+                    //     center[1] /= next->num_walls;
 
-                        vec3 c;
-                        mat4MulVec3(map_mat, center, c);
+                    //     vec3 c;
+                    //     mat4MulVec3(map_mat, center, c);
 
-                        drawLine(avg[0], avg[1], c[0], c[1], highlight);
-                    }
+                    //     drawLine(avg[0], avg[1], c[0], c[1], highlight);
+                    // }
 
                     // normal
                     drawLine(avg[0], avg[1], avg[0] + normal[0] * map_scale * 2.0f, avg[1] + normal[1] * map_scale * 2.0f, COLOR_BLUE);

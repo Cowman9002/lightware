@@ -28,6 +28,8 @@ typedef struct PortalWorld {
     SectorList sectors;
 } PortalWorld;
 
+bool loadPortalWorld(const char *path, float scale, PortalWorld *o_pod);
+
 void freeSectorDef(SectorDef def);
 void freeSector(Sector sector);
 void freePortalWorld(PortalWorld pod);

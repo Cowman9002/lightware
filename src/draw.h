@@ -16,11 +16,10 @@
 #define ASPECT_RATIO ((float)SCREEN_WIDTH / SCREEN_HEIGHT)
 #define INV_ASPECT_RATIO ((float)SCREEN_HEIGHT / SCREEN_WIDTH)
 
-#define FAR_PLANE 100.0f
+#define FAR_PLANE 300.0f
 #define NEAR_PLANE 0.1f
 
-// #define FOV (70.0 * TO_RADS)
-#define FOV (90.0 * TO_RADS)
+#define FOV (75.0 * TO_RADS)
 
 typedef struct Image {
     Color *data;

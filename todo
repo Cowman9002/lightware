@@ -1,10 +1,12 @@
 [x] Render sector
 [x] Portal clipping
 [x] Sector over sector
-[ ] Map file loading and saving
+[x] Map file loading
 [ ] Convert main engine to dll
 [ ] Create level editor
+[ ] Map file saving
 [ ] Polygon filling
+[ ] Active edges a la https://www.flipcode.com/archives/Building_a_3D_Portal_Engine-Issue_16_More_On_Portals.shtml
 [ ] Integrated lighting
 [ ] Skybox
 [ ] 2D directional sprites

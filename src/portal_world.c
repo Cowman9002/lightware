@@ -316,6 +316,7 @@ bool pointInSector(Sector sector, vec3 point) {
 }
 
 Sector *getSector(PortalWorld pod, vec3 point) {
+    // TODO: add bias to last known sector
     Sector *sector = NULL;
     for (SectorListNode *node = pod.sectors.head; node != NULL; node = node->next) {
         if (pointInSector(node->item, point)) {

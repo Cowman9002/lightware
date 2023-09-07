@@ -5,10 +5,10 @@
 [ ] Convert main engine to dll
 [ ] Create level editor
 [ ] Map file saving
-[ ] Polygon filling
 [ ] Active edges a la https://www.flipcode.com/archives/Building_a_3D_Portal_Engine-Issue_16_More_On_Portals.shtml
-[ ] Integrated lighting
+[ ] Polygon filling
 [ ] Skybox
 [ ] 2D directional sprites
+[ ] Integrated lighting
 [ ] Triangle meshes
 [ ] Voxel meshes

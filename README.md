@@ -4,12 +4,12 @@ Engine heavily inspired by Ken Silverman's Build Engine with useful and modern f
 
 Current features:
 - Portal/sector based rendering.
-- Wall, ceiling, and floor texture mapping.
 - Multi-level sectors for true room over room (Mostly working).
 
 Planned features:
 - In engine 2D/3D level editor.
-- Programmable shader pipeline.
+- ~~Programmable shader pipeline.~~
+- Wall, ceiling, and floor texture mapping.
 - Directional sprites.
 - Triangle models.
 - Voxel models.

@@ -327,13 +327,17 @@ Sector *getSector(PortalWorld pod, vec3 point) {
 }
 
 unsigned getSubSector(Sector *sector, vec3 point) {
+    unsigned res = 0;
+
     for (unsigned i = 0; i < sector->num_sub_sectors; ++i) {
-        if (point[2] >= sector->sub_sectors[i].floor_height &&
-            point[2] <= sector->sub_sectors[i].ceiling_height)
-            return i;
+        if(point[2] < sector->sub_sectors[i].floor_height) {
+            return res;
+        } else {
+            res = i;
+        }
     }
 
-    return 0;
+    return res;
 }
 
 void _renderSector(Camera cam, Frustum Frustum, Sector *default_sector);

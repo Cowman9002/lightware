@@ -1,31 +1,16 @@
-#include "lightware.h"
+#include "internal.h"
 
 #include <SDL2/SDL.h>
+#include <stdint.h>
 #include <malloc.h>
 #include <string.h>
 
-typedef struct LW_Context {
-    // rendering
-    SDL_Window *window;
-    SDL_Renderer *renderer;
-    SDL_Texture *screen_texture;
-    unsigned logical_width, logical_height;
-
-    // input
-    const int8_t *keys;
-    int8_t *last_keys;
-
-    // hooks
-    void *user_data;
-    LW_UpdateFn update_fn;
-    LW_RenderFn render_fn;
-
-    // time
-    float seconds;
-
-} LW_Context;
-
 LW_Context *lw_init(LW_ContextInit init) {
+    if (init.update_fn == NULL ||
+        init.render_fn == NULL) {
+        return NULL;
+    }
+
     LW_Context *context = (LW_Context *)malloc(sizeof(*context));
     if (context == NULL) return NULL;
 
@@ -96,7 +81,7 @@ void lw_deinit(LW_Context *const context) {
 }
 
 void *lw_getUserData(LW_Context *const context) {
-    if(context == NULL) return NULL;
+    if (context == NULL) return NULL;
     return context->user_data;
 }
 

@@ -13,19 +13,15 @@ int update(LW_Context *const context, float delta) {
     return 0;
 }
 
-int render(LW_Context *const context, LW_Framebuffer const *const main_frame_buffer) {
-    EditorData *data = (EditorData *)lw_getUserData(context);
+int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
+    // EditorData *data = (EditorData *)lw_getUserData(context);
 
-    for (unsigned y = 0; y < main_frame_buffer->height; ++y) {
-        for (unsigned x = 0; x < main_frame_buffer->width; ++x) {
-            main_frame_buffer->pixels[x + y * main_frame_buffer->width] = (LW_Color){
-                .a = 255,
-                .r = (x + data->frame) & 0xff,
-                .g = (y) & 0xff,
-                .b = data->frame / 8,
-            };
-        }
-    }
+    lw_fillBuffer(main_frame_buffer, LW_COLOR_BLUE);
+
+    lw_setPixel(main_frame_buffer, (lw_uvec2){20, 30}, LW_COLOR_PURPLE);
+    lw_drawLine(main_frame_buffer, (lw_ivec2){50, 50}, (lw_ivec2){100, 120}, LW_COLOR_RED);
+    lw_fillRect(main_frame_buffer, (LW_Rect){{200, 200}, {40, 70}}, LW_COLOR_GREEN);
+
     return 0;
 }
 

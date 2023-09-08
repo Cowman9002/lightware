@@ -7,7 +7,7 @@ function Invoke-Make {
             Set-Location "lightware"
             &"make"
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "make '$item' failed with $LASTEXITCODE"
+                Write-Host "make '$item' failed with $LASTEXITCODE" -ForegroundColor Red
                 Set-Location "../"
                 return $false
             } 
@@ -25,14 +25,14 @@ function Invoke-Make {
             Remove-Item -Path $src
             
             Set-Location "../"
-            Write-Host "Finished make '$item'"
+            Write-Host "Finished make '$item'" -ForegroundColor Green
             return $true
         }
         "editor" {  
             Set-Location "editor"
             &"make"
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "make '$item' failed with $LASTEXITCODE"
+                Write-Host "make '$item' failed with $LASTEXITCODE" -ForegroundColor Red
                 Set-Location "../"
                 return $false
             } 
@@ -45,11 +45,11 @@ function Invoke-Make {
             Remove-Item -Path $src
             
             Set-Location "../"
-            Write-Host "Finished make '$item'"
+            Write-Host "Finished make '$item'" -ForegroundColor Green
             return $true
         }
         Default {
-            Write-Host "Unknown item '$item' for make"
+            Write-Host "Unknown item '$item' for make" -ForegroundColor Red
             return $false
         }
     }
@@ -61,15 +61,15 @@ function Invoke-Run {
             &".\lightware_editor.exe"
 
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "'run' '$item' failed with $LASTEXITCODE"
+                Write-Host "'run' '$item' failed with $LASTEXITCODE" -ForegroundColor Red
                 return $false
             } 
 
-            Write-Host "Finished run '$item'"
+            Write-Host "Finished run '$item'" -ForegroundColor Green
             return $true
         }
         Default {
-            Write-Host "Unknown item '$item' for run"
+            Write-Host "Unknown item '$item' for run" -ForegroundColor Red
             return $false
         }
     }
@@ -84,6 +84,6 @@ switch ($command) {
         }
     }
     Default {
-        Write-Host "Unknown command '$command'"
+        Write-Host "Unknown command '$command'" -ForegroundColor Red
     }
 }

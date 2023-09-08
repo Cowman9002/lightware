@@ -3,6 +3,7 @@
 [x] Sector over sector
 [x] Map file loading
 [ ] Convert main engine to dll
+[ ] Allow concave and holes in sectors
 [ ] Floors and ceilings defined by planes
 [ ] Invisible floors and ceilings when two tiers overlap
 [ ] Create level editor

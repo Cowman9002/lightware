@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-bool pointInPoly(lw_vec2 *vertices, unsigned num_verts, lw_vec2 point) {
+bool lw_pointInPoly(lw_vec2 *vertices, unsigned num_verts, lw_vec2 point) {
     lw_vec2 ray[2] = { { point[0], point[1] }, { point[0] - 1.0f, point[1] } };
     lw_vec2 line[2];
     float t;
@@ -17,7 +17,7 @@ bool pointInPoly(lw_vec2 *vertices, unsigned num_verts, lw_vec2 point) {
         line[1][0] = vertices[i + 1][0];
         line[1][1] = vertices[i + 1][1];
 
-        if (intersectSegmentRay(line, ray, &t)) {
+        if (lw_intersectSegmentRay(line, ray, &t)) {
             // If hitting a vertex exactly, only count if other vertex is above the ray
             if (t != 0.0f && t != 1.0f) {
                 ++num_intersections;
@@ -32,7 +32,7 @@ bool pointInPoly(lw_vec2 *vertices, unsigned num_verts, lw_vec2 point) {
     return num_intersections % 2 == 1;
 }
 
-bool pointInConvexPoly(lw_vec2 *vertices, unsigned num_vertices, lw_vec2 point) {
+bool lw_pointInConvexPoly(lw_vec2 *vertices, unsigned num_vertices, lw_vec2 point) {
     lw_vec2 a, b, m, n;
 
     a[0] = vertices[0][0];
@@ -70,7 +70,7 @@ bool pointInConvexPoly(lw_vec2 *vertices, unsigned num_vertices, lw_vec2 point) 
     return true;
 }
 
-bool intersectSegmentPlane(lw_vec3 line[2], lw_vec4 plane, float *o_t) {
+bool lw_intersectSegmentPlane(lw_vec3 line[2], lw_vec4 plane, float *o_t) {
     lw_vec3 p0 = {
         plane[0] * plane[3],
         plane[1] * plane[3],
@@ -105,7 +105,7 @@ bool intersectSegmentPlane(lw_vec3 line[2], lw_vec4 plane, float *o_t) {
     return true;
 }
 
-bool intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t) {
+bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t) {
     float x1, x2, x3, x4;
     float y1, y2, y3, y4;
     x1 = seg0[0][0];
@@ -137,7 +137,7 @@ bool intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t) {
     return true;
 }
 
-bool intersectSegmentLine(lw_vec2 seg[2], lw_vec2 line[2], float *o_t) {
+bool lw_intersectSegmentLine(lw_vec2 seg[2], lw_vec2 line[2], float *o_t) {
     float x1, x2, x3, x4;
     float y1, y2, y3, y4;
     x1 = seg[0][0];
@@ -166,7 +166,7 @@ bool intersectSegmentLine(lw_vec2 seg[2], lw_vec2 line[2], float *o_t) {
     return true;
 }
 
-bool intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float *o_t) {
+bool lw_intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float *o_t) {
     float x1, x2, x3, x4;
     float y1, y2, y3, y4;
     x1 = line[0][0];
@@ -197,4 +197,21 @@ bool intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float *o_t) {
     }
 
     return true;
+}
+
+void lw_calcPlaneFromPoints(lw_vec3 p0, lw_vec3 p1, lw_vec3 p2, lw_vec4 o_plane) {
+    lw_vec3 e0, e1;
+
+    e0[0] = p1[0] - p0[0];
+    e0[1] = p1[1] - p0[1];
+    e0[2] = p1[2] - p0[2];
+
+    e1[0] = p2[0] - p0[0];
+    e1[1] = p2[1] - p0[1];
+    e1[2] = p2[2] - p0[2];
+
+    lw_cross3d(e0, e1, o_plane);
+    lw_normalize3d(o_plane);
+
+    o_plane[3] = lw_dot3d(o_plane, p0);
 }

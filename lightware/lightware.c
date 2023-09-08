@@ -85,6 +85,11 @@ void *lw_getUserData(LW_Context *const context) {
     return context->user_data;
 }
 
+void lw_getFramebufferDimentions(LW_Framebuffer *const frame_buffer, lw_ivec2 o_dims) {
+    o_dims[0] = frame_buffer->width;
+    o_dims[1] = frame_buffer->height;
+}
+
 int lw_start(LW_Context *const context) {
     if (context == NULL) return -1;
 

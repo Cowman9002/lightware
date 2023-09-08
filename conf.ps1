@@ -7,7 +7,7 @@ function Invoke-Make {
             Set-Location "lightware"
             &"make"
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "'make' '$item' failed with $result"
+                Write-Host "make '$item' failed with $LASTEXITCODE"
                 Set-Location "../"
                 return $false
             } 
@@ -25,14 +25,14 @@ function Invoke-Make {
             Remove-Item -Path $src
             
             Set-Location "../"
-            Write-Host "Finished 'make' '$item'"
+            Write-Host "Finished make '$item'"
             return $true
         }
         "editor" {  
             Set-Location "editor"
             &"make"
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "'make' '$item' failed with $result"
+                Write-Host "make '$item' failed with $LASTEXITCODE"
                 Set-Location "../"
                 return $false
             } 
@@ -45,11 +45,11 @@ function Invoke-Make {
             Remove-Item -Path $src
             
             Set-Location "../"
-            Write-Host "Finished 'make' '$item'"
+            Write-Host "Finished make '$item'"
             return $true
         }
         Default {
-            Write-Host "Unknown item '$item' for 'make'"
+            Write-Host "Unknown item '$item' for make"
             return $false
         }
     }
@@ -61,15 +61,15 @@ function Invoke-Run {
             &".\lightware_editor.exe"
 
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "'run' '$item' failed with $result"
+                Write-Host "'run' '$item' failed with $LASTEXITCODE"
                 return $false
             } 
 
-            Write-Host "Finished 'run' '$item'"
+            Write-Host "Finished run '$item'"
             return $true
         }
         Default {
-            Write-Host "Unknown item '$item' for 'run'"
+            Write-Host "Unknown item '$item' for run"
             return $false
         }
     }
@@ -78,7 +78,8 @@ function Invoke-Run {
 switch ($command) {
     "make" { Invoke-Make }
     "run" { 
-        if(Invoke-Make) {
+        $res = Invoke-Make
+        if($res -eq $true) {
             Invoke-Run
         }
     }

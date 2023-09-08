@@ -80,16 +80,6 @@ void lw_deinit(LW_Context *const context) {
     free(context);
 }
 
-void *lw_getUserData(LW_Context *const context) {
-    if (context == NULL) return NULL;
-    return context->user_data;
-}
-
-void lw_getFramebufferDimentions(LW_Framebuffer *const frame_buffer, lw_ivec2 o_dims) {
-    o_dims[0] = frame_buffer->width;
-    o_dims[1] = frame_buffer->height;
-}
-
 int lw_start(LW_Context *const context) {
     if (context == NULL) return -1;
 
@@ -114,8 +104,24 @@ int lw_start(LW_Context *const context) {
         context->seconds = ticks / 1000.0f;
 
         memcpy(context->last_keys, context->keys, sizeof(*context->last_keys) * SDL_NUM_SCANCODES);
+        context->last_mouse_button_bitset = context->mouse_button_bitset;
+        context->last_mouse_x             = context->mouse_x;
+        context->last_mouse_y             = context->mouse_y;
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) return 0;
+            switch (event.type) {
+                case SDL_QUIT:
+                    return 0;
+                case SDL_MOUSEMOTION:
+                    context->mouse_x = event.motion.x;
+                    context->mouse_y = event.motion.y;
+                    break;
+                case SDL_MOUSEBUTTONDOWN:
+                    context->mouse_button_bitset |= 1 << event.button.button;
+                    break;
+                case SDL_MOUSEBUTTONUP:
+                    context->mouse_button_bitset &= ~(1 << event.button.button);
+                    break;
+            }
         }
 
         ////////////////////////////////////////////////
@@ -141,4 +147,49 @@ int lw_start(LW_Context *const context) {
     }
 
     return 0;
+}
+
+void *lw_getUserData(LW_Context *const context) {
+    if (context == NULL) return NULL;
+    return context->user_data;
+}
+
+void lw_getFramebufferDimentions(LW_Framebuffer *const frame_buffer, lw_ivec2 o_dims) {
+    o_dims[0] = frame_buffer->width;
+    o_dims[1] = frame_buffer->height;
+}
+
+bool lw_isKey(LW_Context *const context, LW_Keycode key) {
+    return context->keys[key];
+}
+
+bool lw_isKeyDown(LW_Context *const context, LW_Keycode key) {
+    return context->keys[key] && !context->last_keys[key];
+}
+
+bool lw_isKeyUp(LW_Context *const context, LW_Keycode key) {
+    return !context->keys[key] && context->last_keys[key];
+}
+
+bool lw_isMouseButton(LW_Context *const context, unsigned button) {
+    return (context->mouse_button_bitset & (1 << button)) != 0;
+}
+
+bool lw_isMouseButtonDown(LW_Context *const context, unsigned button) {
+    return (context->mouse_button_bitset & (1 << button)) != 0 && (context->last_mouse_button_bitset & (1 << button)) == 0;
+}
+
+bool lw_isMouseButtonUp(LW_Context *const context, unsigned button) {
+    return (context->mouse_button_bitset & (1 << button)) == 0 && (context->last_mouse_button_bitset & (1 << button)) != 0;
+}
+
+
+void lw_getMousePos(LW_Context *const context, lw_ivec2 o_pos) {
+    o_pos[0] = context->mouse_x;
+    o_pos[1] = context->mouse_y;
+}
+
+void lw_getMouseDelta(LW_Context *const context, lw_ivec2 o_delta) {
+    o_delta[0] = context->mouse_x - context->last_mouse_x;
+    o_delta[1] = context->mouse_y - context->last_mouse_y;
 }

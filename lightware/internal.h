@@ -15,6 +15,11 @@ typedef struct LW_Context {
     // input
     const int8_t *keys;
     int8_t *last_keys;
+    int mouse_button_bitset;
+    int last_mouse_button_bitset;
+    
+    int mouse_x, mouse_y;
+    int last_mouse_x, last_mouse_y;
 
     // hooks
     void *user_data;

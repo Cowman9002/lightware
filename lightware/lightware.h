@@ -20,33 +20,6 @@
 #endif
 
 //
-// CONTEXT
-//
-
-typedef struct LW_Context LW_Context;
-typedef struct LW_Framebuffer LW_Framebuffer;
-
-typedef int (*LW_UpdateFn)(LW_Context *const context, float delta);
-typedef int (*LW_RenderFn)(LW_Context *const context, LW_Framebuffer *const main_frame_buffer);
-
-typedef struct LW_ContextInit {
-    const char *title;
-    unsigned logical_width, logical_height;
-    unsigned scale;
-
-    void *user_data;
-    LW_UpdateFn update_fn;
-    LW_RenderFn render_fn;
-} LW_ContextInit;
-
-LIGHTWARE_API LW_Context *lw_init(LW_ContextInit init);
-LIGHTWARE_API void lw_deinit(LW_Context *const context);
-
-LIGHTWARE_API int lw_start(LW_Context *const context);
-
-LIGHTWARE_API void *lw_getUserData(LW_Context *const context);
-
-//
 //  MATH
 //
 
@@ -102,6 +75,233 @@ LIGHTWARE_API void lw_mat4Mul(lw_mat4 a, lw_mat4 b, lw_mat4 out);
 LIGHTWARE_API void lw_mat4MulVec4(lw_mat4 a, lw_vec4 b, lw_vec4 out);
 
 //
+// CONTEXT
+//
+
+typedef struct LW_Context LW_Context;
+typedef struct LW_Framebuffer LW_Framebuffer;
+
+typedef int (*LW_UpdateFn)(LW_Context *const context, float delta);
+typedef int (*LW_RenderFn)(LW_Context *const context, LW_Framebuffer *const main_frame_buffer);
+
+typedef struct LW_ContextInit {
+    const char *title;
+    unsigned logical_width, logical_height;
+    unsigned scale;
+
+    void *user_data;
+    LW_UpdateFn update_fn;
+    LW_RenderFn render_fn;
+} LW_ContextInit;
+
+LIGHTWARE_API LW_Context *lw_init(LW_ContextInit init);
+LIGHTWARE_API void lw_deinit(LW_Context *const context);
+
+LIGHTWARE_API int lw_start(LW_Context *const context);
+
+LIGHTWARE_API void *lw_getUserData(LW_Context *const context);
+
+//
+//  INPUT
+//
+//  Most input functions are simple wrappers around SDL 2.0 functions
+//
+
+typedef enum LW_Key {
+
+    // Based on the SDL 2.0 scancode enums
+
+    LW_KeyUnknown = 0,
+
+    LW_KeyA = 4,
+    LW_KeyB = 5,
+    LW_KeyC = 6,
+    LW_KeyD = 7,
+    LW_KeyE = 8,
+    LW_KeyF = 9,
+    LW_KeyG = 10,
+    LW_KeyH = 11,
+    LW_KeyI = 12,
+    LW_KeyJ = 13,
+    LW_KeyK = 14,
+    LW_KeyL = 15,
+    LW_KeyM = 16,
+    LW_KeyN = 17,
+    LW_KeyO = 18,
+    LW_KeyP = 19,
+    LW_KeyQ = 20,
+    LW_KeyR = 21,
+    LW_KeyS = 22,
+    LW_KeyT = 23,
+    LW_KeyU = 24,
+    LW_KeyV = 25,
+    LW_KeyW = 26,
+    LW_KeyX = 27,
+    LW_KeyY = 28,
+    LW_KeyZ = 29,
+
+    LW_Key1 = 30,
+    LW_Key2 = 31,
+    LW_Key3 = 32,
+    LW_Key4 = 33,
+    LW_Key5 = 34,
+    LW_Key6 = 35,
+    LW_Key7 = 36,
+    LW_Key8 = 37,
+    LW_Key9 = 38,
+    LW_Key0 = 39,
+
+    LW_KeyReturn = 40,
+    LW_KeyEscape = 41,
+    LW_KeyBackspace = 42,
+    LW_KeyTab = 43,
+    LW_KeySpace = 44,
+
+    LW_KeyMinus = 45,
+    LW_KeyEquas = 46,
+    LW_KeyLeftBracket = 47,
+    LW_KeyRightBracket  = 48,
+    LW_KeyBackslash = 49,
+    LW_KeyNonUsSlash = 50,
+    LW_KeySemicolon = 51,
+    LW_KeyApostrophe = 52,
+    LW_KeyGravee = 53,
+    LW_KeyComma = 54,
+    LW_KeyPeriod = 55,
+    LW_KeySlash = 56,
+
+    LW_KeyCapsLock = 57,
+
+    LW_KeyF1 = 58,
+    LW_KeyF2 = 59,
+    LW_KeyF3 = 60,
+    LW_KeyF4 = 61,
+    LW_KeyF5 = 62,
+    LW_KeyF6 = 63,
+    LW_KeyF7 = 64,
+    LW_KeyF8 = 65,
+    LW_KeyF9 = 66,
+    LW_KeyF10 = 67,
+    LW_KeyF11 = 68,
+    LW_KeyF12 = 69,
+
+    LW_KeyPrintScreen = 70,
+    LW_KeyScrollLock = 71,
+    LW_KeyPause = 72,
+    LW_KeyInsert = 73,
+
+    LW_KeyHome = 74,
+    LW_KeyPageUp = 75,
+    LW_KeyDelete = 76,
+    LW_KeyEnd = 77,
+    LW_KeyPageDown = 78,
+    LW_KeyRight = 79,
+    LW_KeyLeft = 80,
+    LW_KeyDown = 81,
+    LW_KeyUp = 82,
+
+    LW_KeyNumLockClear = 83,
+
+    LW_KeyKpDivide = 84,
+    LW_KeyKpMultiply = 85,
+    LW_KeyKpMinus = 86,
+    LW_KeyKpPlus = 87,
+    LW_KeyKpEnter = 88,
+    LW_KeyKp1 = 89,
+    LW_KeyKp2 = 90,
+    LW_KeyKp3 = 91,
+    LW_KeyKp4 = 92,
+    LW_KeyKp5 = 93,
+    LW_KeyKp6 = 94,
+    LW_KeyKp7 = 95,
+    LW_KeyKp8 = 96,
+    LW_KeyKp9 = 97,
+    LW_KeyKp0 = 98,
+    LW_KeyKpPeriod = 99,
+
+    LW_KeyNonUsBackslash = 100,
+
+    LW_KeyApplication = 101,
+    LW_KeyPower = 102, 
+    
+    LW_KeyKpEquals = 103,
+    LW_KeyF13 = 104,
+    LW_KeyF14 = 105,
+    LW_KeyF15 = 106,
+    LW_KeyF16 = 107,
+    LW_KeyF17 = 108,
+    LW_KeyF18 = 109,
+    LW_KeyF19 = 110,
+    LW_KeyF20 = 111,
+    LW_KeyF21 = 112,
+    LW_KeyF22 = 113,
+    LW_KeyF23 = 114,
+    LW_KeyF24 = 115,
+    LW_KeyExecute = 116,
+    LW_KeyHelp = 117,    /**< AL Integrated Help Center */
+    LW_KeyMenu = 118,    /**< Menu (show menu) */
+    LW_KeySelect = 119,
+    LW_KeyStop = 120,    /**< AC Stop */
+    LW_KeyAgain = 121,   /**< AC Redo/Repeat */
+    LW_KeyUndo = 122,    /**< AC Undo */
+    LW_KeyCut = 123,     /**< AC Cut */
+    LW_KeyCopy = 124,    /**< AC Copy */
+    LW_KeyPaste = 125,   /**< AC Paste */
+    LW_KeyFind = 126,    /**< AC Find */
+    LW_KeyMute = 127,
+    LW_KeyVolumeUp = 128,
+    LW_KeyVolumeDown = 129,
+/* not sure whether there's a reason to enable these */
+/*     LW_KeyLOCKINGCAPSLOCK = 130,  */
+/*     LW_KeyLOCKINGNUMLOCK = 131, */
+/*     LW_KeyLOCKINGSCROLLLOCK = 132, */
+    LW_KeyKpComma = 133,
+    LW_KeyKpEqualsAs400 = 134,
+
+    LW_KeyInternational1 = 135, /**< used on Asian keyboards, see
+                                            footnotes in USB doc */
+    LW_KeyInternational2 = 136,
+    LW_KeyInternational3 = 137, /**< Yen */
+    LW_KeyInternational4 = 138,
+    LW_KeyInternational5 = 139,
+    LW_KeyInternational6 = 140,
+    LW_KeyInternational7 = 141,
+    LW_KeyInternational8 = 142,
+    LW_KeyInternational9 = 143,
+    LW_KeyLang1 = 144, /**< Hangul/English toggle */
+    LW_KeyLang2 = 145, /**< Hanja conversion */
+    LW_KeyLang3 = 146, /**< Katakana */
+    LW_KeyLang4 = 147, /**< Hiragana */
+    LW_KeyLang5 = 148, /**< Zenkaku/Hankaku */
+    LW_KeyLang6 = 149, /**< reserved */
+    LW_KeyLang7 = 150, /**< reserved */
+    LW_KeyLang8 = 151, /**< reserved */
+    LW_KeyLang9 = 152, /**< reserved */
+
+    LW_KeyLCtrl = 224,
+    LW_KeyLShift = 225,
+    LW_KeyLAlt = 226, /**< alt, option */
+    LW_KeyLGui = 227, /**< windows, command (apple), meta */
+    LW_KeyRCtrl = 228,
+    LW_KeyRShift = 229,
+    LW_KeyRAlt = 230, /**< alt gr, option */
+    LW_KeyRGui = 231, /**< windows, command (apple), meta */
+
+    LW_KeycodeSize
+} LW_Keycode;
+
+LIGHTWARE_API bool lw_isKey(LW_Context *const context, LW_Keycode key);
+LIGHTWARE_API bool lw_isKeyDown(LW_Context *const context, LW_Keycode key);
+LIGHTWARE_API bool lw_isKeyUp(LW_Context *const context, LW_Keycode key);
+
+LIGHTWARE_API bool lw_isMouseButton(LW_Context *const context, unsigned button);
+LIGHTWARE_API bool lw_isMouseButtonDown(LW_Context *const context, unsigned button);
+LIGHTWARE_API bool lw_isMouseButtonUp(LW_Context *const context, unsigned button);
+
+LIGHTWARE_API void lw_getMousePos(LW_Context *const context, lw_ivec2 o_pos);
+LIGHTWARE_API void lw_getMouseDelta(LW_Context *const context, lw_ivec2 o_delta);
+
+//
 //  GEOMETRY
 //
 
@@ -139,9 +339,9 @@ typedef struct LW_Rect {
     lw_ivec2 pos, size;
 } LW_Rect;
 
-#define RGBA(r, g, b, a) ((Color){ (a), (b), (g), (r) })
+#define RGBA(r, g, b, a) ((LW_Color){ (a), (b), (g), (r) })
 #define RGB(r, g, b) RGBA(r, g, b, 255)
-#define RGBV(v) RGB(v, v, v)
+#define RGBv(v) RGB(v, v, v)
 
 #define LW_COLOR_WHITE ((LW_Color){ .r = 255, .g = 255, .b = 255, .a = 255 })
 #define LW_COLOR_BLACK ((LW_Color){ .r = 0, .g = 0, .b = 0, .a = 255 })

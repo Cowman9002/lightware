@@ -6,9 +6,7 @@
 #include <malloc.h>
 #include <string.h>
 
-// TODO: Move editor to state pattern
 // TODO: GUI using larger framebuffer overlay
-
 
 #define DYNARRAY_CHECK_CAP(arr)                                 \
     do {                                                        \
@@ -20,12 +18,6 @@
 
 LW_FontTexture g_font;
 char g_text_buffer[64];
-
-enum EditorState {
-    EditorStateOpen,
-    EditorStateMovingPoint,
-    EditorStateAddSector,
-};
 
 typedef struct EditorData {
     int screen_width, screen_height;
@@ -42,11 +34,11 @@ typedef struct EditorData {
     unsigned lines_len, lines_cap;
 
     // New sector variables
+    bool creating_sector;
     lw_uvec2 *new_lines;
     unsigned new_lines_len, new_lines_cap;
     unsigned new_sec_first_point, prev_point_index;
 
-    enum EditorState state;
 } EditorData;
 
 int update(LW_Context *const context, float delta) {
@@ -78,6 +70,7 @@ int update(LW_Context *const context, float delta) {
         editor->point_hover_index = ~0;
         lw_vec4 a                 = { 0, 0, 0, 1 }, c;
         for (unsigned i = 0; i < editor->hoverable_index; ++i) {
+            if (i == editor->point_grab_index) continue;
             a[0] = editor->points[i][0], a[1] = editor->points[i][1];
             lw_mat4MulVec4(editor->world_to_screen_mat, a, c);
 
@@ -93,101 +86,161 @@ int update(LW_Context *const context, float delta) {
         }
     }
 
-    switch (editor->state) {
-        case EditorStateOpen: {
-            if (lw_isMouseButtonDown(context, 0)) {
-                if (editor->point_grab_index == ~0 && editor->point_hover_index != ~0) {
-                    editor->state            = EditorStateMovingPoint;
-                    editor->point_grab_index = editor->point_hover_index;
-                }
-            }
+    // Point grabbing
 
-            if (lw_isKeyDown(context, LW_KeySpace)) {
-                if (editor->point_hover_index == ~0) {
-                    // not hovering, make new point
-                    DYNARRAY_CHECK_CAP(editor->points);
-                    editor->points[editor->points_len][0] = mouse_world_pos[0];
-                    editor->points[editor->points_len][1] = mouse_world_pos[1];
-                    editor->new_sec_first_point           = editor->points_len;
+    if (editor->point_grab_index != ~0) {
+        if (lw_isMouseButtonUp(context, 0)) {
+            if (editor->point_hover_index != editor->point_grab_index && editor->point_hover_index != ~0) {
+                // combine points
 
-                    ++editor->points_len;
-                    ++editor->hoverable_index;
-                } else {
-                    // create new sector connected to point
-                    editor->new_sec_first_point = editor->point_hover_index;
+                for (unsigned i = 0; i < editor->lines_len; ++i) {
+                    // remove all lines that connect the two points
+                    if ((editor->lines[i][0] == editor->point_grab_index && editor->lines[i][1] == editor->point_hover_index) ||
+                        (editor->lines[i][0] == editor->point_hover_index && editor->lines[i][1] == editor->point_grab_index)) {
+                        --editor->lines_len;
+                        editor->lines[i][0] = editor->lines[editor->lines_len][0];
+                        editor->lines[i][1] = editor->lines[editor->lines_len][1];
+                        editor->lines[i][2] = editor->lines[editor->lines_len][2];
+                    }
                 }
 
-                editor->prev_point_index = editor->new_sec_first_point;
-                editor->state            = EditorStateAddSector;
-            }
-        } break;
+                for (unsigned i = 0; i < editor->lines_len; ++i) {
+                    // update all lines that use grab to use hover instead
+                    if (editor->lines[i][0] == editor->point_grab_index || editor->lines[i][1] == editor->point_grab_index) {
+                        unsigned other_index = editor->lines[i][0] == editor->point_grab_index ? editor->lines[i][1] : editor->lines[i][0];
 
-        case EditorStateMovingPoint: {
-            if (lw_isMouseButtonUp(context, 0)) {
-                editor->point_grab_index = ~0;
-                editor->state            = EditorStateOpen;
-            } else {
-                editor->points[editor->point_grab_index][0] = mouse_world_pos[0];
-                editor->points[editor->point_grab_index][1] = mouse_world_pos[1];
-            }
-        } break;
-
-        case EditorStateAddSector: {
-            if (lw_isKeyDown(context, LW_KeySpace)) {
-                if (editor->point_hover_index == ~0) {
-                    // not hovering, make new point
-                    DYNARRAY_CHECK_CAP(editor->new_lines);
-                    editor->new_lines[editor->new_lines_len][0] = editor->prev_point_index;
-                    editor->new_lines[editor->new_lines_len][1] = editor->points_len;
-                    editor->prev_point_index                    = editor->points_len;
-                    ++editor->new_lines_len;
-
-                    DYNARRAY_CHECK_CAP(editor->points);
-                    editor->points[editor->points_len][0] = mouse_world_pos[0];
-                    editor->points[editor->points_len][1] = mouse_world_pos[1];
-                    ++editor->points_len;
-
-                } else if (editor->point_hover_index != editor->new_sec_first_point) {
-                    // make new line using exiting point
-                    DYNARRAY_CHECK_CAP(editor->new_lines);
-                    editor->new_lines[editor->new_lines_len][0] = editor->prev_point_index;
-                    editor->new_lines[editor->new_lines_len][1] = editor->point_hover_index;
-                    editor->prev_point_index                    = editor->point_hover_index;
-                    ++editor->new_lines_len;
-
-                } else if (editor->new_lines_len >= 2) {
-                    // finish sector
-                    DYNARRAY_CHECK_CAP(editor->new_lines);
-                    editor->new_lines[editor->new_lines_len][0] = editor->prev_point_index;
-                    editor->new_lines[editor->new_lines_len][1] = editor->new_lines[0][0];
-                    ++editor->new_lines_len;
-
-                    for (unsigned i = 0; i < editor->new_lines_len; ++i) {
-
+                        // check if line exists
+                        bool exists = false;
                         for (unsigned j = 0; j < editor->lines_len; ++j) {
-                            // already exists
-                            if ((editor->lines[j][0] == editor->new_lines[i][0] && editor->lines[j][1] == editor->new_lines[i][1]) ||
-                                (editor->lines[j][0] == editor->new_lines[i][1] && editor->lines[j][1] == editor->new_lines[i][0])) {
-                                editor->lines[j][2] = 1;
-                                goto _check_next;
+                            if(j == i) continue;
+                            // if so, remove this line
+
+                            bool match0 = editor->lines[j][0] == editor->point_grab_index || editor->lines[j][0] == editor->point_hover_index;
+                            bool match1 = editor->lines[j][1] == editor->point_grab_index || editor->lines[j][1] == editor->point_hover_index;
+
+                            if (match0 && editor->lines[j][1] == other_index || match1 && editor->lines[j][0] == other_index) {
+                                --editor->lines_len;
+                                editor->lines[i][0] = editor->lines[editor->lines_len][0];
+                                editor->lines[i][1] = editor->lines[editor->lines_len][1];
+                                editor->lines[i][2] = editor->lines[editor->lines_len][2];
+
+                                exists = true;
+                                break;
                             }
                         }
 
-                        DYNARRAY_CHECK_CAP(editor->lines);
-                        editor->lines[editor->lines_len][0] = editor->new_lines[i][0];
-                        editor->lines[editor->lines_len][1] = editor->new_lines[i][1];
-                        editor->lines[editor->lines_len][2] = 0;
-                        ++editor->lines_len;
-
-                    _check_next:
+                        if (!exists) {
+                            // else, just update it
+                            if (editor->lines[i][0] == editor->point_grab_index) editor->lines[i][0] = editor->point_hover_index;
+                            if (editor->lines[i][1] == editor->point_grab_index) editor->lines[i][1] = editor->point_hover_index;
+                        }
                     }
-                    editor->new_lines_len       = 0;
-                    editor->new_sec_first_point = ~0;
-                    editor->hoverable_index     = editor->points_len;
-                    editor->state               = EditorStateOpen;
+                }
+
+                // remove grabbed point
+                --editor->points_len;
+                editor->points[editor->point_grab_index][0] = editor->points[editor->points_len][0];
+                editor->points[editor->point_grab_index][1] = editor->points[editor->points_len][1];
+                // fix swap remove indices
+                for (unsigned i = 0; i < editor->lines_len; ++i) {
+                    if (editor->lines[i][0] == editor->points_len) {
+                        editor->lines[i][0] = editor->point_grab_index;
+                    }
+                    if (editor->lines[i][1] == editor->points_len) {
+                        editor->lines[i][1] = editor->point_grab_index;
+                    }
                 }
             }
-        } break;
+            editor->point_grab_index = ~0;
+        } else {
+            editor->points[editor->point_grab_index][0] = mouse_world_pos[0];
+            editor->points[editor->point_grab_index][1] = mouse_world_pos[1];
+        }
+    } else {
+        if (lw_isMouseButtonDown(context, 0)) {
+            if (editor->point_hover_index != ~0) {
+                editor->point_grab_index = editor->point_hover_index;
+            }
+        }
+    }
+
+    // create new sector
+
+    if (!editor->creating_sector) {
+        if (lw_isKeyDown(context, LW_KeySpace)) {
+            if (editor->point_hover_index == ~0) {
+                // not hovering, make new point
+                DYNARRAY_CHECK_CAP(editor->points);
+                editor->points[editor->points_len][0] = mouse_world_pos[0];
+                editor->points[editor->points_len][1] = mouse_world_pos[1];
+                editor->new_sec_first_point           = editor->points_len;
+
+                ++editor->points_len;
+                ++editor->hoverable_index;
+            } else {
+                // create new sector connected to point
+                editor->new_sec_first_point = editor->point_hover_index;
+            }
+
+            editor->prev_point_index = editor->new_sec_first_point;
+            editor->creating_sector  = true;
+        }
+    } else {
+        if (lw_isKeyDown(context, LW_KeySpace)) {
+            if (editor->point_hover_index == ~0) {
+                // not hovering, make new point
+                DYNARRAY_CHECK_CAP(editor->new_lines);
+                editor->new_lines[editor->new_lines_len][0] = editor->prev_point_index;
+                editor->new_lines[editor->new_lines_len][1] = editor->points_len;
+                editor->prev_point_index                    = editor->points_len;
+                ++editor->new_lines_len;
+
+                DYNARRAY_CHECK_CAP(editor->points);
+                editor->points[editor->points_len][0] = mouse_world_pos[0];
+                editor->points[editor->points_len][1] = mouse_world_pos[1];
+                ++editor->points_len;
+
+            } else if (editor->point_hover_index != editor->new_sec_first_point) {
+                // make new line using exiting point
+                DYNARRAY_CHECK_CAP(editor->new_lines);
+                editor->new_lines[editor->new_lines_len][0] = editor->prev_point_index;
+                editor->new_lines[editor->new_lines_len][1] = editor->point_hover_index;
+                editor->prev_point_index                    = editor->point_hover_index;
+                ++editor->new_lines_len;
+
+            } else if (editor->new_lines_len >= 2) {
+                // finish sector
+                DYNARRAY_CHECK_CAP(editor->new_lines);
+                editor->new_lines[editor->new_lines_len][0] = editor->prev_point_index;
+                editor->new_lines[editor->new_lines_len][1] = editor->new_lines[0][0];
+                ++editor->new_lines_len;
+
+                for (unsigned i = 0; i < editor->new_lines_len; ++i) {
+
+                    for (unsigned j = 0; j < editor->lines_len; ++j) {
+                        // already exists
+                        if ((editor->lines[j][0] == editor->new_lines[i][0] && editor->lines[j][1] == editor->new_lines[i][1]) ||
+                            (editor->lines[j][0] == editor->new_lines[i][1] && editor->lines[j][1] == editor->new_lines[i][0])) {
+                            // editor->lines[j][2] = 1;
+                            // TODO: Check if this should be a portal
+                            goto _check_next;
+                        }
+                    }
+
+                    DYNARRAY_CHECK_CAP(editor->lines);
+                    editor->lines[editor->lines_len][0] = editor->new_lines[i][0];
+                    editor->lines[editor->lines_len][1] = editor->new_lines[i][1];
+                    editor->lines[editor->lines_len][2] = 0;
+                    ++editor->lines_len;
+
+                _check_next:
+                }
+                editor->new_lines_len       = 0;
+                editor->new_sec_first_point = ~0;
+                editor->hoverable_index     = editor->points_len;
+                editor->creating_sector     = false;
+            }
+        }
     }
 
     return 0;
@@ -216,9 +269,9 @@ int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
         p[0] = roundf(c[0]), p[1] = roundf(c[1]);
         q[0] = roundf(d[0]), q[1] = roundf(d[1]);
 
-        if(editor->lines[i][2] == 0) {
+        if (editor->lines[i][2] == 0) {
             lw_drawLine(main_frame_buffer, p, q, LW_COLOR_WHITE);
-        } else if(editor->lines[i][2] == 1) {
+        } else if (editor->lines[i][2] == 1) {
             lw_drawLine(main_frame_buffer, p, q, LW_COLOR_RED);
         }
     }
@@ -261,13 +314,10 @@ int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
         }
     }
 
-    switch (editor->state) {
-        case EditorStateOpen: snprintf(g_text_buffer, sizeof(g_text_buffer), "View"); break;
-        case EditorStateMovingPoint: snprintf(g_text_buffer, sizeof(g_text_buffer), "Move Point"); break;
-        case EditorStateAddSector: snprintf(g_text_buffer, sizeof(g_text_buffer), "Add Sector"); break;
-    }
-
-    lw_drawString(main_frame_buffer, (lw_ivec2){ 8, 8 }, LW_COLOR_WHITE, g_font, g_text_buffer);
+    snprintf(g_text_buffer, sizeof(g_text_buffer), "Points: %u", editor->points_len);
+    lw_drawString(main_frame_buffer, (lw_ivec2){ 5, 5 }, LW_COLOR_WHITE, g_font, g_text_buffer);
+    snprintf(g_text_buffer, sizeof(g_text_buffer), "Lines: %u", editor->lines_len);
+    lw_drawString(main_frame_buffer, (lw_ivec2){ 5, 5 + 1 * 16 }, LW_COLOR_WHITE, g_font, g_text_buffer);
 
     return 0;
 }
@@ -295,11 +345,10 @@ int main() {
     if (!lw_loadTexture("res/fonts/small.png", &g_font.texture)) return -1;
     g_font.char_width = g_font.texture.width / 95;
 
-    editor.state = EditorStateOpen;
-
-    editor.screen_width     = 640;
-    editor.screen_height    = 480;
-    editor.point_grab_index = ~0;
+    editor.screen_width      = 640;
+    editor.screen_height     = 480;
+    editor.point_grab_index  = ~0;
+    editor.point_hover_index = ~0;
 
     // if(!lw_loadPortalWorld("res/maps/map0.map", 5.0f, &editor.pod)) return -1;
     // editor.cam.pos[0] = 0.0f;

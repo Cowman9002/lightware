@@ -50,6 +50,8 @@ typedef float lw_mat4[16];
 
 typedef int lw_ivec2[2];
 typedef unsigned lw_uvec2[2];
+typedef int lw_ivec3[3];
+typedef unsigned lw_uvec3[3];
 
 LIGHTWARE_API float lw_dot2d(lw_vec2 a, lw_vec2 b);
 LIGHTWARE_API float lw_cross2d(lw_vec2 a, lw_vec2 b);
@@ -151,111 +153,111 @@ typedef enum LW_Key {
     LW_Key9 = 38,
     LW_Key0 = 39,
 
-    LW_KeyReturn = 40,
-    LW_KeyEscape = 41,
+    LW_KeyReturn    = 40,
+    LW_KeyEscape    = 41,
     LW_KeyBackspace = 42,
-    LW_KeyTab = 43,
-    LW_KeySpace = 44,
+    LW_KeyTab       = 43,
+    LW_KeySpace     = 44,
 
-    LW_KeyMinus = 45,
-    LW_KeyEquas = 46,
-    LW_KeyLeftBracket = 47,
-    LW_KeyRightBracket  = 48,
-    LW_KeyBackslash = 49,
-    LW_KeyNonUsSlash = 50,
-    LW_KeySemicolon = 51,
-    LW_KeyApostrophe = 52,
-    LW_KeyGravee = 53,
-    LW_KeyComma = 54,
-    LW_KeyPeriod = 55,
-    LW_KeySlash = 56,
+    LW_KeyMinus        = 45,
+    LW_KeyEquas        = 46,
+    LW_KeyLeftBracket  = 47,
+    LW_KeyRightBracket = 48,
+    LW_KeyBackslash    = 49,
+    LW_KeyNonUsSlash   = 50,
+    LW_KeySemicolon    = 51,
+    LW_KeyApostrophe   = 52,
+    LW_KeyGravee       = 53,
+    LW_KeyComma        = 54,
+    LW_KeyPeriod       = 55,
+    LW_KeySlash        = 56,
 
     LW_KeyCapsLock = 57,
 
-    LW_KeyF1 = 58,
-    LW_KeyF2 = 59,
-    LW_KeyF3 = 60,
-    LW_KeyF4 = 61,
-    LW_KeyF5 = 62,
-    LW_KeyF6 = 63,
-    LW_KeyF7 = 64,
-    LW_KeyF8 = 65,
-    LW_KeyF9 = 66,
+    LW_KeyF1  = 58,
+    LW_KeyF2  = 59,
+    LW_KeyF3  = 60,
+    LW_KeyF4  = 61,
+    LW_KeyF5  = 62,
+    LW_KeyF6  = 63,
+    LW_KeyF7  = 64,
+    LW_KeyF8  = 65,
+    LW_KeyF9  = 66,
     LW_KeyF10 = 67,
     LW_KeyF11 = 68,
     LW_KeyF12 = 69,
 
     LW_KeyPrintScreen = 70,
-    LW_KeyScrollLock = 71,
-    LW_KeyPause = 72,
-    LW_KeyInsert = 73,
+    LW_KeyScrollLock  = 71,
+    LW_KeyPause       = 72,
+    LW_KeyInsert      = 73,
 
-    LW_KeyHome = 74,
-    LW_KeyPageUp = 75,
-    LW_KeyDelete = 76,
-    LW_KeyEnd = 77,
+    LW_KeyHome     = 74,
+    LW_KeyPageUp   = 75,
+    LW_KeyDelete   = 76,
+    LW_KeyEnd      = 77,
     LW_KeyPageDown = 78,
-    LW_KeyRight = 79,
-    LW_KeyLeft = 80,
-    LW_KeyDown = 81,
-    LW_KeyUp = 82,
+    LW_KeyRight    = 79,
+    LW_KeyLeft     = 80,
+    LW_KeyDown     = 81,
+    LW_KeyUp       = 82,
 
     LW_KeyNumLockClear = 83,
 
-    LW_KeyKpDivide = 84,
+    LW_KeyKpDivide   = 84,
     LW_KeyKpMultiply = 85,
-    LW_KeyKpMinus = 86,
-    LW_KeyKpPlus = 87,
-    LW_KeyKpEnter = 88,
-    LW_KeyKp1 = 89,
-    LW_KeyKp2 = 90,
-    LW_KeyKp3 = 91,
-    LW_KeyKp4 = 92,
-    LW_KeyKp5 = 93,
-    LW_KeyKp6 = 94,
-    LW_KeyKp7 = 95,
-    LW_KeyKp8 = 96,
-    LW_KeyKp9 = 97,
-    LW_KeyKp0 = 98,
-    LW_KeyKpPeriod = 99,
+    LW_KeyKpMinus    = 86,
+    LW_KeyKpPlus     = 87,
+    LW_KeyKpEnter    = 88,
+    LW_KeyKp1        = 89,
+    LW_KeyKp2        = 90,
+    LW_KeyKp3        = 91,
+    LW_KeyKp4        = 92,
+    LW_KeyKp5        = 93,
+    LW_KeyKp6        = 94,
+    LW_KeyKp7        = 95,
+    LW_KeyKp8        = 96,
+    LW_KeyKp9        = 97,
+    LW_KeyKp0        = 98,
+    LW_KeyKpPeriod   = 99,
 
     LW_KeyNonUsBackslash = 100,
 
     LW_KeyApplication = 101,
-    LW_KeyPower = 102, 
-    
-    LW_KeyKpEquals = 103,
-    LW_KeyF13 = 104,
-    LW_KeyF14 = 105,
-    LW_KeyF15 = 106,
-    LW_KeyF16 = 107,
-    LW_KeyF17 = 108,
-    LW_KeyF18 = 109,
-    LW_KeyF19 = 110,
-    LW_KeyF20 = 111,
-    LW_KeyF21 = 112,
-    LW_KeyF22 = 113,
-    LW_KeyF23 = 114,
-    LW_KeyF24 = 115,
-    LW_KeyExecute = 116,
-    LW_KeyHelp = 117,    /**< AL Integrated Help Center */
-    LW_KeyMenu = 118,    /**< Menu (show menu) */
-    LW_KeySelect = 119,
-    LW_KeyStop = 120,    /**< AC Stop */
-    LW_KeyAgain = 121,   /**< AC Redo/Repeat */
-    LW_KeyUndo = 122,    /**< AC Undo */
-    LW_KeyCut = 123,     /**< AC Cut */
-    LW_KeyCopy = 124,    /**< AC Copy */
-    LW_KeyPaste = 125,   /**< AC Paste */
-    LW_KeyFind = 126,    /**< AC Find */
-    LW_KeyMute = 127,
-    LW_KeyVolumeUp = 128,
+    LW_KeyPower       = 102,
+
+    LW_KeyKpEquals   = 103,
+    LW_KeyF13        = 104,
+    LW_KeyF14        = 105,
+    LW_KeyF15        = 106,
+    LW_KeyF16        = 107,
+    LW_KeyF17        = 108,
+    LW_KeyF18        = 109,
+    LW_KeyF19        = 110,
+    LW_KeyF20        = 111,
+    LW_KeyF21        = 112,
+    LW_KeyF22        = 113,
+    LW_KeyF23        = 114,
+    LW_KeyF24        = 115,
+    LW_KeyExecute    = 116,
+    LW_KeyHelp       = 117, /**< AL Integrated Help Center */
+    LW_KeyMenu       = 118, /**< Menu (show menu) */
+    LW_KeySelect     = 119,
+    LW_KeyStop       = 120, /**< AC Stop */
+    LW_KeyAgain      = 121, /**< AC Redo/Repeat */
+    LW_KeyUndo       = 122, /**< AC Undo */
+    LW_KeyCut        = 123, /**< AC Cut */
+    LW_KeyCopy       = 124, /**< AC Copy */
+    LW_KeyPaste      = 125, /**< AC Paste */
+    LW_KeyFind       = 126, /**< AC Find */
+    LW_KeyMute       = 127,
+    LW_KeyVolumeUp   = 128,
     LW_KeyVolumeDown = 129,
-/* not sure whether there's a reason to enable these */
-/*     LW_KeyLOCKINGCAPSLOCK = 130,  */
-/*     LW_KeyLOCKINGNUMLOCK = 131, */
-/*     LW_KeyLOCKINGSCROLLLOCK = 132, */
-    LW_KeyKpComma = 133,
+    /* not sure whether there's a reason to enable these */
+    /*     LW_KeyLOCKINGCAPSLOCK = 130,  */
+    /*     LW_KeyLOCKINGNUMLOCK = 131, */
+    /*     LW_KeyLOCKINGSCROLLLOCK = 132, */
+    LW_KeyKpComma       = 133,
     LW_KeyKpEqualsAs400 = 134,
 
     LW_KeyInternational1 = 135, /**< used on Asian keyboards, see
@@ -268,24 +270,24 @@ typedef enum LW_Key {
     LW_KeyInternational7 = 141,
     LW_KeyInternational8 = 142,
     LW_KeyInternational9 = 143,
-    LW_KeyLang1 = 144, /**< Hangul/English toggle */
-    LW_KeyLang2 = 145, /**< Hanja conversion */
-    LW_KeyLang3 = 146, /**< Katakana */
-    LW_KeyLang4 = 147, /**< Hiragana */
-    LW_KeyLang5 = 148, /**< Zenkaku/Hankaku */
-    LW_KeyLang6 = 149, /**< reserved */
-    LW_KeyLang7 = 150, /**< reserved */
-    LW_KeyLang8 = 151, /**< reserved */
-    LW_KeyLang9 = 152, /**< reserved */
+    LW_KeyLang1          = 144, /**< Hangul/English toggle */
+    LW_KeyLang2          = 145, /**< Hanja conversion */
+    LW_KeyLang3          = 146, /**< Katakana */
+    LW_KeyLang4          = 147, /**< Hiragana */
+    LW_KeyLang5          = 148, /**< Zenkaku/Hankaku */
+    LW_KeyLang6          = 149, /**< reserved */
+    LW_KeyLang7          = 150, /**< reserved */
+    LW_KeyLang8          = 151, /**< reserved */
+    LW_KeyLang9          = 152, /**< reserved */
 
-    LW_KeyLCtrl = 224,
+    LW_KeyLCtrl  = 224,
     LW_KeyLShift = 225,
-    LW_KeyLAlt = 226, /**< alt, option */
-    LW_KeyLGui = 227, /**< windows, command (apple), meta */
-    LW_KeyRCtrl = 228,
+    LW_KeyLAlt   = 226, /**< alt, option */
+    LW_KeyLGui   = 227, /**< windows, command (apple), meta */
+    LW_KeyRCtrl  = 228,
     LW_KeyRShift = 229,
-    LW_KeyRAlt = 230, /**< alt gr, option */
-    LW_KeyRGui = 231, /**< windows, command (apple), meta */
+    LW_KeyRAlt   = 230, /**< alt gr, option */
+    LW_KeyRGui   = 231, /**< windows, command (apple), meta */
 
     LW_KeycodeSize
 } LW_Keycode;
@@ -304,6 +306,14 @@ LIGHTWARE_API void lw_getMouseDelta(LW_Context *const context, lw_ivec2 o_delta)
 //
 //  GEOMETRY
 //
+
+typedef struct LW_Rect {
+    lw_vec2 pos, size;
+} LW_Rect;
+
+typedef struct LW_Recti {
+    lw_ivec2 pos, size;
+} LW_Recti;
 
 /// @brief Returns true if point is inside of polygon. Polygon can be concave and have holes, but should be closed for predictable results.
 /// @param vertices array of points stored {line_start0, line_end0, line_start1, line_end1, ...}
@@ -328,23 +338,43 @@ LIGHTWARE_API bool lw_intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float
 LIGHTWARE_API void lw_calcPlaneFromPoints(lw_vec3 p0, lw_vec3 p1, lw_vec3 p2, lw_vec4 o_plane);
 
 //
-//  DRAWING
+//  TEXTURE
 //
 
 typedef struct LW_Color {
     uint8_t a, b, g, r;
 } LW_Color;
+typedef struct LW_Color LW_Colour;
 
-typedef struct LW_Rect {
-    lw_ivec2 pos, size;
-} LW_Rect;
+typedef struct LW_Texture {
+    LW_Color *data;
+    unsigned width, height;
+} LW_Texture;
+
+LIGHTWARE_API bool lw_loadTexture(const char *path, LW_Texture *o_texture);
+LIGHTWARE_API void lw_freeTexture(LW_Texture texture);
+
+LIGHTWARE_API LW_Color lw_sampleTextureRaw(LW_Texture texture, lw_uvec2 coords);
+
+//
+//  DRAWING
+//
+
+typedef struct LW_FontTexture {
+    LW_Texture texture;
+    unsigned char_width;
+} LW_FontTexture;
 
 #define RGBA(r, g, b, a) ((LW_Color){ (a), (b), (g), (r) })
 #define RGB(r, g, b) RGBA(r, g, b, 255)
 #define RGBv(v) RGB(v, v, v)
 
+#define LW_COLOR_CLEAR ((LW_Color){ .r = 0, .g = 0, .b = 0, .a = 0 })
 #define LW_COLOR_WHITE ((LW_Color){ .r = 255, .g = 255, .b = 255, .a = 255 })
 #define LW_COLOR_BLACK ((LW_Color){ .r = 0, .g = 0, .b = 0, .a = 255 })
+#define LW_COLOR_GREY ((LW_Color){ .r = 128, .g = 128, .b = 128, .a = 255 })
+#define LW_COLOR_GRAY LW_COLOR_GREY
+
 #define LW_COLOR_RED ((LW_Color){ .r = 255, .g = 0, .b = 0, .a = 255 })
 #define LW_COLOR_GREEN ((LW_Color){ .r = 0, .g = 255, .b = 0, .a = 255 })
 #define LW_COLOR_BLUE ((LW_Color){ .r = 0, .g = 0, .b = 255, .a = 255 })
@@ -360,10 +390,12 @@ LIGHTWARE_API void lw_getFramebufferDimentions(LW_Framebuffer *const frame_buffe
 
 LIGHTWARE_API void lw_setPixel(LW_Framebuffer *const framebuffer, lw_uvec2 pos, LW_Color color);
 LIGHTWARE_API void lw_fillBuffer(LW_Framebuffer *const framebuffer, LW_Color color);
-LIGHTWARE_API void lw_fillRect(LW_Framebuffer *const framebuffer, LW_Rect rect, LW_Color color);
-LIGHTWARE_API void lw_drawRect(LW_Framebuffer *const framebuffer, LW_Rect rect, LW_Color color);
+LIGHTWARE_API void lw_fillRect(LW_Framebuffer *const framebuffer, LW_Recti rect, LW_Color color);
+LIGHTWARE_API void lw_drawRect(LW_Framebuffer *const framebuffer, LW_Recti rect, LW_Color color);
 LIGHTWARE_API void lw_drawLine(LW_Framebuffer *const framebuffer, lw_ivec2 v0, lw_ivec2 v1, LW_Color color);
 LIGHTWARE_API void lw_drawPoly(LW_Framebuffer *const framebuffer, lw_ivec2 *vertices, unsigned num_vertices, LW_Color color);
+
+LIGHTWARE_API void lw_drawString(LW_Framebuffer *const framebuffer, lw_ivec2 pos, LW_Color draw_color, LW_FontTexture font, const char *text);
 
 //
 //  PORTAL WORLD
@@ -431,3 +463,14 @@ LIGHTWARE_API LW_Sector *lw_getSector(LW_PortalWorld pod, lw_vec2 point);
 LIGHTWARE_API unsigned lw_getSubSector(LW_Sector *sector, lw_vec3 point);
 
 LIGHTWARE_API void lw_renderPortalWorld(LW_PortalWorld pod, LW_Camera camera);
+
+
+//
+//  COLLISION
+//
+
+typedef struct LW_Aabb {
+    lw_vec2 low, high;
+} LW_Aabb;
+
+LIGHTWARE_API bool lw_pointInAabb(LW_Aabb aabb, lw_vec2 point);

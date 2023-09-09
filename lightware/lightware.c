@@ -3,6 +3,7 @@
 #include <SDL2/SDL.h>
 #include <stdint.h>
 #include <malloc.h>
+#include <stdio.h>
 #include <string.h>
 
 LW_Context *lw_init(LW_ContextInit init) {
@@ -116,10 +117,10 @@ int lw_start(LW_Context *const context) {
                     context->mouse_y = event.motion.y;
                     break;
                 case SDL_MOUSEBUTTONDOWN:
-                    context->mouse_button_bitset |= 1 << event.button.button;
+                    context->mouse_button_bitset |= SDL_BUTTON(event.button.button);
                     break;
                 case SDL_MOUSEBUTTONUP:
-                    context->mouse_button_bitset &= ~(1 << event.button.button);
+                    context->mouse_button_bitset &= ~SDL_BUTTON(event.button.button);
                     break;
             }
         }
@@ -182,7 +183,6 @@ bool lw_isMouseButtonDown(LW_Context *const context, unsigned button) {
 bool lw_isMouseButtonUp(LW_Context *const context, unsigned button) {
     return (context->mouse_button_bitset & (1 << button)) == 0 && (context->last_mouse_button_bitset & (1 << button)) != 0;
 }
-
 
 void lw_getMousePos(LW_Context *const context, lw_ivec2 o_pos) {
     o_pos[0] = context->mouse_x;

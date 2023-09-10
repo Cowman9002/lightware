@@ -160,7 +160,7 @@ typedef enum LW_Key {
     LW_KeySpace     = 44,
 
     LW_KeyMinus        = 45,
-    LW_KeyEquas        = 46,
+    LW_KeyEquals       = 46,
     LW_KeyLeftBracket  = 47,
     LW_KeyRightBracket = 48,
     LW_KeyBackslash    = 49,
@@ -302,6 +302,7 @@ LIGHTWARE_API bool lw_isMouseButtonUp(LW_Context *const context, unsigned button
 
 LIGHTWARE_API void lw_getMousePos(LW_Context *const context, lw_ivec2 o_pos);
 LIGHTWARE_API void lw_getMouseDelta(LW_Context *const context, lw_ivec2 o_delta);
+LIGHTWARE_API float lw_getMouseScroll(LW_Context *const context);
 
 //
 //  GEOMETRY

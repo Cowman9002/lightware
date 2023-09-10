@@ -17,6 +17,7 @@ typedef struct LW_Context {
     int8_t *last_keys;
     int mouse_button_bitset;
     int last_mouse_button_bitset;
+    float scroll;
     
     int mouse_x, mouse_y;
     int last_mouse_x, last_mouse_y;

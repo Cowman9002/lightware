@@ -108,10 +108,13 @@ int lw_start(LW_Context *const context) {
         context->last_mouse_button_bitset = context->mouse_button_bitset;
         context->last_mouse_x             = context->mouse_x;
         context->last_mouse_y             = context->mouse_y;
+        context->scroll = 0;
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 case SDL_QUIT:
                     return 0;
+                case SDL_MOUSEWHEEL:
+                    context->scroll = event.wheel.preciseY;
                 case SDL_MOUSEMOTION:
                     context->mouse_x = event.motion.x;
                     context->mouse_y = event.motion.y;
@@ -192,4 +195,8 @@ void lw_getMousePos(LW_Context *const context, lw_ivec2 o_pos) {
 void lw_getMouseDelta(LW_Context *const context, lw_ivec2 o_delta) {
     o_delta[0] = context->mouse_x - context->last_mouse_x;
     o_delta[1] = context->mouse_y - context->last_mouse_y;
+}
+
+float lw_getMouseScroll(LW_Context *const context) {
+    return context->scroll;
 }

@@ -10,11 +10,16 @@
 
 // [x] TODO: Select multiple points at once
 // [x] TODO: Ability to insert a point along an edge
-// [ ] TODO: Camera movement
-// [ ] TODO: Grid snapping similar to trenchbroom
+// [x] TODO: Camera movement
+// [x] TODO: Grid snapping similar to trenchbroom
 // [ ] TODO: Add sector group above lines
 // [ ] TODO: Allow slicing sectors based on rule if entire new sector is inside one sector and it is finished normally or connected to an already existing point in sector
 // [ ] TODO: Detect when line should be portal based on if line is shared by two sectors
+
+#define MIN_ZOOM 0.001
+#define MAX_ZOOM 1.0
+#define MIN_GRID (1.0f / 16.0f)
+#define MAX_GRID (128.0f)
 
 #define DYNARRAY_CHECK_CAP(arr)                                 \
     do {                                                        \
@@ -30,6 +35,12 @@ char g_text_buffer[64];
 typedef struct Editor {
     int screen_width, screen_height;
     lw_mat4 world_to_screen_mat, screen_to_world_mat;
+
+    lw_vec2 cam_pos;
+    float cam_zoom;
+    float cam_zoom_percent;
+
+    float grid;
 
     lw_vec2 *points;
     unsigned points_len, points_cap;
@@ -66,6 +77,16 @@ void initEditor(Editor *const editor) {
     editor->screen_height     = 480;
     editor->point_grab_index  = ~0;
     editor->point_hover_index = ~0;
+    editor->grid              = 1.0f;
+
+    {
+        // editor->cam_zoom = MAX_ZOOM * powf(MIN_ZOOM / MAX_ZOOM, editor->cam_zoom_percent);
+        // k = m * (n / m) ^ t
+        // (k / m) = (n / m) ^ t
+        // log(k/m) = t * log(n/m)
+        // log(k / m) / log(n / m) = t;
+        editor->cam_zoom_percent = logf(0.03 / MAX_ZOOM) / logf(MIN_ZOOM / MAX_ZOOM);
+    }
 }
 
 int update(LW_Context *const context, float delta) {
@@ -76,21 +97,79 @@ int update(LW_Context *const context, float delta) {
     lw_vec4 mouse_screen_posv4 = { mouse_screen_pos[0], mouse_screen_pos[1], 0.0f, 1.0f };
 
     {
-        lw_mat4 scale, translate;
-        lw_mat4Scale((lw_vec3){ 1.0f, -1.0f, 1.0f }, scale);
-        lw_mat4Translate((lw_vec3){ -editor->screen_width * 0.5f, -editor->screen_height * 0.5f, 0.0f }, translate);
-        lw_mat4Mul(scale, translate, editor->screen_to_world_mat);
+        // Camera movement
+        lw_vec2 planar;
+        planar[0] = lw_isKey(context, LW_KeyD) - lw_isKey(context, LW_KeyA);
+        planar[1] = lw_isKey(context, LW_KeyW) - lw_isKey(context, LW_KeyS);
+        float z   = (lw_isKey(context, LW_KeyE) - lw_isKey(context, LW_KeyQ)) * 0.4f + lw_getMouseScroll(context) * 2.5f;
+
+        lw_normalize2d(planar);
+        editor->cam_pos[0] += planar[0] * delta * editor->cam_zoom * 500.0f;
+        editor->cam_pos[1] += planar[1] * delta * editor->cam_zoom * 500.0f;
+
+        editor->cam_zoom_percent += z * delta;
+        editor->cam_zoom_percent = clamp(editor->cam_zoom_percent, 0.0f, 1.0f);
+        editor->cam_zoom         = MAX_ZOOM * powf(MIN_ZOOM / MAX_ZOOM, editor->cam_zoom_percent);
+
+        // grid
+        int grid_incr = lw_isKeyDown(context, LW_KeyEquals) - lw_isKeyDown(context, LW_KeyMinus);
+        if (grid_incr > 0) {
+            if (editor->grid <= 0) {
+                editor->grid = MIN_GRID;
+            } else if (editor->grid < MAX_GRID) {
+                editor->grid *= 2;
+            }
+        } else if (grid_incr < 0) {
+            if (editor->grid <= MIN_GRID) {
+                editor->grid = 0.0f;
+            } else {
+                editor->grid *= 0.5f;
+            }
+        }
     }
 
     {
+        float zoom     = editor->cam_zoom;
+        float inv_zoom = 1.0f / zoom;
+
+        lw_mat4 proj, view;
         lw_mat4 scale, translate;
+
+        // screen to world
+        lw_mat4Scale((lw_vec3){ 1.0f, -1.0f, 1.0f }, scale);
+        lw_mat4Translate((lw_vec3){ -editor->screen_width * 0.5f, -editor->screen_height * 0.5f, 0.0f }, translate);
+        lw_mat4Mul(scale, translate, proj);
+
+        lw_mat4Translate((lw_vec3){ editor->cam_pos[0], editor->cam_pos[1], 0.0f }, translate);
+        lw_mat4Scale((lw_vec3){ zoom, zoom, zoom }, scale);
+        lw_mat4Mul(translate, scale, view);
+
+        lw_mat4Mul(view, proj, editor->screen_to_world_mat);
+
+        // world to screen
+
         lw_mat4Scale((lw_vec3){ 1.0f, -1.0f, 1.0f }, scale);
         lw_mat4Translate((lw_vec3){ editor->screen_width * 0.5f, editor->screen_height * 0.5f, 0.0f }, translate);
-        lw_mat4Mul(translate, scale, editor->world_to_screen_mat);
+        lw_mat4Mul(translate, scale, proj);
+
+        lw_mat4Translate((lw_vec3){ -editor->cam_pos[0], -editor->cam_pos[1], 0.0f }, translate);
+        lw_mat4Scale((lw_vec3){ inv_zoom, inv_zoom, inv_zoom }, scale);
+        lw_mat4Mul(scale, translate, view);
+
+        lw_mat4Mul(proj, view, editor->world_to_screen_mat);
     }
 
     lw_vec4 mouse_world_pos;
     lw_mat4MulVec4(editor->screen_to_world_mat, mouse_screen_posv4, mouse_world_pos);
+    lw_vec4 snapped_mouse_world_pos;
+
+    if (editor->grid == 0.0f) {
+        snapped_mouse_world_pos[0] = mouse_world_pos[0];
+        snapped_mouse_world_pos[1] = mouse_world_pos[1];
+    } else {
+        snapped_mouse_world_pos[0] = roundf(mouse_world_pos[0] / editor->grid) * editor->grid;
+        snapped_mouse_world_pos[1] = roundf(mouse_world_pos[1] / editor->grid) * editor->grid;
+    }
 
     {
         // calc hover index
@@ -192,7 +271,7 @@ int update(LW_Context *const context, float delta) {
                     ++editor->points_selected_len;
                 }
             }
-            editor->is_selecting = false;
+            editor->is_selecting        = false;
             editor->is_moving_selection = false;
         }
     } else {
@@ -298,8 +377,8 @@ int update(LW_Context *const context, float delta) {
 
             if (editor->is_moving_selection) {
                 lw_vec2 move_delta;
-                move_delta[0] = mouse_world_pos[0] - editor->points[editor->point_grab_index][0];
-                move_delta[1] = mouse_world_pos[1] - editor->points[editor->point_grab_index][1];
+                move_delta[0] = snapped_mouse_world_pos[0] - editor->points[editor->point_grab_index][0];
+                move_delta[1] = snapped_mouse_world_pos[1] - editor->points[editor->point_grab_index][1];
 
                 // move selected points
                 for (unsigned i = 0; i < editor->points_selected_len; ++i) {
@@ -308,8 +387,8 @@ int update(LW_Context *const context, float delta) {
                     editor->points[j][1] += move_delta[1];
                 }
             } else {
-                editor->points[editor->point_grab_index][0] = mouse_world_pos[0];
-                editor->points[editor->point_grab_index][1] = mouse_world_pos[1];
+                editor->points[editor->point_grab_index][0] = snapped_mouse_world_pos[0];
+                editor->points[editor->point_grab_index][1] = snapped_mouse_world_pos[1];
             }
         }
     }
@@ -321,8 +400,8 @@ int update(LW_Context *const context, float delta) {
             if (editor->point_hover_index == ~0) {
                 // not hovering, make new point
                 DYNARRAY_CHECK_CAP(editor->points);
-                editor->points[editor->points_len][0] = mouse_world_pos[0];
-                editor->points[editor->points_len][1] = mouse_world_pos[1];
+                editor->points[editor->points_len][0] = snapped_mouse_world_pos[0];
+                editor->points[editor->points_len][1] = snapped_mouse_world_pos[1];
                 editor->new_sec_first_point           = editor->points_len;
 
                 ++editor->points_len;
@@ -346,8 +425,8 @@ int update(LW_Context *const context, float delta) {
                 ++editor->new_lines_len;
 
                 DYNARRAY_CHECK_CAP(editor->points);
-                editor->points[editor->points_len][0] = mouse_world_pos[0];
-                editor->points[editor->points_len][1] = mouse_world_pos[1];
+                editor->points[editor->points_len][0] = snapped_mouse_world_pos[0];
+                editor->points[editor->points_len][1] = snapped_mouse_world_pos[1];
                 ++editor->points_len;
 
             } else if (editor->point_hover_index != editor->new_sec_first_point) {
@@ -409,6 +488,45 @@ int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
     lw_uvec2 n;
     lw_ivec2 p, q;
 
+    // grid
+    if (editor->grid > 0.0) {
+        // editor->cam_zoom is how many units there are per pixel
+        float inv_zoom = 1.0f / editor->cam_zoom;
+
+        float grid     = editor->grid;
+        float inv_grid = 1.0f / editor->grid;
+
+        lw_vec4 tl;
+
+        // round screen bounds in to nearest grid bounds
+        a[0] = 0, a[1] = 0;
+        lw_mat4MulVec4(editor->screen_to_world_mat, a, tl);
+
+        tl[0] = ceilf(tl[0] * inv_grid) * grid;
+        tl[1] = floorf(tl[1] * inv_grid) * grid;
+
+        lw_mat4MulVec4(editor->world_to_screen_mat, tl, c);
+
+        const LW_Color GRID_COLOR = RGB(40, 50, 100);
+
+        // vertical lines
+        for (float x = c[0]; x < editor->screen_width; x += grid * inv_zoom) {
+            for (float y = 0; y < editor->screen_height; ++y) {
+                lw_setPixel(main_frame_buffer, (lw_uvec2){ x, y }, GRID_COLOR);
+                lw_setPixel(main_frame_buffer, (lw_uvec2){ x, y }, GRID_COLOR);
+            }
+        }
+
+        // horizontal lines
+        for (float y = c[1]; y < editor->screen_height; y += grid * inv_zoom) {
+            for (float x = 0; x < editor->screen_width; ++x) {
+                lw_setPixel(main_frame_buffer, (lw_uvec2){ x, y }, GRID_COLOR);
+                lw_setPixel(main_frame_buffer, (lw_uvec2){ x, y }, GRID_COLOR);
+            }
+        }
+    }
+
+
     LW_Aabb selection_aabb;
     if (editor->is_selecting) {
         selection_aabb.low[0] = editor->selection_aabb.low[0], selection_aabb.low[1] = editor->selection_aabb.low[1];
@@ -437,7 +555,7 @@ int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
         }
 
         // if (editor->lines[i][2] == 0) {
-            lw_drawLine(main_frame_buffer, p, q, c);
+        lw_drawLine(main_frame_buffer, p, q, c);
         // }
     }
 
@@ -532,10 +650,20 @@ int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
         lw_fillRect(main_frame_buffer, rect, c);
     }
 
-    snprintf(g_text_buffer, sizeof(g_text_buffer), "Points: %u", editor->points_len);
+    snprintf(g_text_buffer, sizeof(g_text_buffer), "Zoom: %f", editor->cam_zoom);
     lw_drawString(main_frame_buffer, (lw_ivec2){ 5, 5 }, LW_COLOR_WHITE, g_font, g_text_buffer);
-    snprintf(g_text_buffer, sizeof(g_text_buffer), "Lines: %u", editor->lines_len);
+
+    if (editor->grid == 0.0f) {
+        snprintf(g_text_buffer, sizeof(g_text_buffer), "Grid: off");
+    } else {
+        snprintf(g_text_buffer, sizeof(g_text_buffer), "Grid: %f", editor->grid);
+    }
     lw_drawString(main_frame_buffer, (lw_ivec2){ 5, 5 + 1 * 16 }, LW_COLOR_WHITE, g_font, g_text_buffer);
+
+    snprintf(g_text_buffer, sizeof(g_text_buffer), "Points: %u", editor->points_len);
+    lw_drawString(main_frame_buffer, (lw_ivec2){ 5, 5 + 2 * 16 }, LW_COLOR_WHITE, g_font, g_text_buffer);
+    snprintf(g_text_buffer, sizeof(g_text_buffer), "Lines: %u", editor->lines_len);
+    lw_drawString(main_frame_buffer, (lw_ivec2){ 5, 5 + 3 * 16 }, LW_COLOR_WHITE, g_font, g_text_buffer);
 
     return 0;
 }

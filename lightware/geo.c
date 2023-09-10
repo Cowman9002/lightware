@@ -215,3 +215,23 @@ void lw_calcPlaneFromPoints(lw_vec3 p0, lw_vec3 p1, lw_vec3 p2, lw_vec4 o_plane)
 
     o_plane[3] = lw_dot3d(o_plane, p0);
 }
+
+void lw_closestPointOnSegment(lw_vec2 seg[2], lw_vec2 point, lw_vec2 o_point) {
+    lw_vec2 v = { seg[1][0] - seg[0][0], seg[1][1] - seg[0][1] };
+    lw_vec2 u = { point[0] - seg[0][0], point[1] - seg[0][1] };
+
+    float d = lw_dot2d(v, v);
+
+    if (d == 0) {
+        // line is exists at only a single point
+        o_point[0] = seg[0][0];
+        o_point[1] = seg[0][1];
+        return;
+    }
+
+    float t = lw_dot2d(v, u) / d;
+    t = clamp(t, 0.0f, 1.0f);
+
+    o_point[0] = lerp(seg[0][0], seg[1][0], t);
+    o_point[1] = lerp(seg[0][1], seg[1][1], t);
+}

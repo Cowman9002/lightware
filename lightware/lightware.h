@@ -337,6 +337,8 @@ LIGHTWARE_API bool lw_intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float
 
 LIGHTWARE_API void lw_calcPlaneFromPoints(lw_vec3 p0, lw_vec3 p1, lw_vec3 p2, lw_vec4 o_plane);
 
+LIGHTWARE_API void lw_closestPointOnSegment(lw_vec2 seg[2], lw_vec2 point, lw_vec2 o_point);
+
 //
 //  TEXTURE
 //

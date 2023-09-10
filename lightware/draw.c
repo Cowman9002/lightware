@@ -114,25 +114,41 @@ void lw_fillRect(LW_Framebuffer *const framebuffer, LW_Recti rect, LW_Color colo
 }
 
 void lw_drawRect(LW_Framebuffer *const framebuffer, LW_Recti rect, LW_Color color) {
-    LW_Recti clipped = {
+    LW_Recti bounds = {
         .pos = {
-            clamp(rect.pos[0], 0, framebuffer->width),
-            clamp(rect.pos[1], 0, framebuffer->height),
+            rect.pos[0],
+            rect.pos[1],
         },
         .size = {
-            clamp(rect.pos[0] + rect.size[0] - 1, 0, framebuffer->width),
-            clamp(rect.pos[1] + rect.size[1] - 1, 0, framebuffer->height),
+            rect.pos[0] + rect.size[0],
+            rect.pos[1] + rect.size[1],
         },
     };
 
-    for (unsigned y = clipped.pos[1]; y < clipped.size[1]; ++y) {
-        framebuffer->pixels[clipped.pos[0] + y * framebuffer->width]  = color;
-        framebuffer->pixels[clipped.size[0] + y * framebuffer->width] = color;
+    bool left_clipped   = bounds.pos[0] < 0 || bounds.pos[0] >= framebuffer->width;
+    bool right_clipped  = (bounds.size[0] - 1) < 0 || (bounds.size[0] - 1) >= framebuffer->width;
+    bool top_clipped    = bounds.pos[1] < 0 || bounds.pos[1] >= framebuffer->height;
+    bool bottom_clipped = (bounds.size[1] - 1) < 0 || (bounds.size[1] - 1) >= framebuffer->height;
+
+    bounds.pos[0]  = clamp(bounds.pos[0], 0, framebuffer->width);
+    bounds.size[0] = clamp(bounds.size[0], 0, framebuffer->width);
+    bounds.pos[1]  = clamp(bounds.pos[1], 0, framebuffer->height);
+    bounds.size[1] = clamp(bounds.size[1], 0, framebuffer->height);
+
+    // left and right
+    for (unsigned y = bounds.pos[1]; y < bounds.size[1]; ++y) {
+        if (!left_clipped)
+            framebuffer->pixels[bounds.pos[0] + y * framebuffer->width] = color;
+        if (!right_clipped)
+            framebuffer->pixels[(bounds.size[0] - 1) + y * framebuffer->width] = color;
     }
 
-    for (unsigned x = clipped.pos[0]; x < clipped.size[0]; ++x) {
-        framebuffer->pixels[x + clipped.pos[1] * framebuffer->width]  = color;
-        framebuffer->pixels[x + clipped.size[1] * framebuffer->width] = color;
+    // top and bottom
+    for (unsigned x = bounds.pos[0]; x < bounds.size[0]; ++x) {
+        if (!top_clipped)
+            framebuffer->pixels[x + bounds.pos[1] * framebuffer->width] = color;
+        if (!bottom_clipped)
+            framebuffer->pixels[x + (bounds.size[1] - 1) * framebuffer->width] = color;
     }
 }
 
@@ -218,10 +234,10 @@ void lw_drawString(LW_Framebuffer *const framebuffer, lw_ivec2 pos, LW_Color dra
 
             for (unsigned y = 0; y < font.texture.height; ++y) {
                 for (unsigned x = 0; x < font.char_width; ++x) {
-                    LW_Color color = lw_sampleTextureRaw(font.texture, (lw_uvec2){x + index * font.char_width, y});
+                    LW_Color color = lw_sampleTextureRaw(font.texture, (lw_uvec2){ x + index * font.char_width, y });
 
                     if (color.r != 0) {
-                        lw_setPixel(framebuffer, (lw_uvec2){pos[0] + x + x_offset, pos[1] + y}, draw_color);
+                        lw_setPixel(framebuffer, (lw_uvec2){ pos[0] + x + x_offset, pos[1] + y }, draw_color);
                     }
                 }
             }

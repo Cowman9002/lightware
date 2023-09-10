@@ -8,6 +8,14 @@
 
 // TODO: GUI using larger framebuffer overlay
 
+// [x] TODO: Select multiple points at once
+// [ ] TODO: Ability to insert a point along an edge
+// [ ] TODO: Camera movement
+// [ ] TODO: Grid snapping similar to trenchbroom
+// [ ] TODO: Add sector group above lines
+// [ ] TODO: Allow slicing sectors based on rule if entire new sector is inside one sector and it is finished normally or connected to an already existing point in sector
+// [ ] TODO: Detect when line should be portal based on if line is shared by two sectors
+
 #define DYNARRAY_CHECK_CAP(arr)                                 \
     do {                                                        \
         if (arr##_len >= arr##_cap) {                           \
@@ -19,11 +27,10 @@
 LW_FontTexture g_font;
 char g_text_buffer[64];
 
-typedef struct EditorData {
+typedef struct Editor {
     int screen_width, screen_height;
     lw_mat4 world_to_screen_mat, screen_to_world_mat;
 
-    unsigned point_grab_index;
     unsigned point_hover_index;
     unsigned hoverable_index;
 
@@ -33,16 +40,33 @@ typedef struct EditorData {
     lw_uvec3 *lines; // [2] is information about line
     unsigned lines_len, lines_cap;
 
+    // Point selection
+    bool is_selecting;
+    LW_Aabb selection_aabb;
+    unsigned point_grab_index;
+    bool is_moving_selection;
+    unsigned *points_selected;
+    unsigned points_selected_len, points_selected_cap;
+
     // New sector variables
     bool creating_sector;
     lw_uvec2 *new_lines;
     unsigned new_lines_len, new_lines_cap;
     unsigned new_sec_first_point, prev_point_index;
 
-} EditorData;
+} Editor;
+
+void initEditor(Editor *const editor) {
+    memset(editor, 0, sizeof(*editor));
+
+    editor->screen_width      = 640;
+    editor->screen_height     = 480;
+    editor->point_grab_index  = ~0;
+    editor->point_hover_index = ~0;
+}
 
 int update(LW_Context *const context, float delta) {
-    EditorData *editor = (EditorData *)lw_getUserData(context);
+    Editor *editor = (Editor *)lw_getUserData(context);
 
     lw_ivec2 mouse_screen_pos;
     lw_getMousePos(context, mouse_screen_pos);
@@ -86,83 +110,150 @@ int update(LW_Context *const context, float delta) {
         }
     }
 
+    // selection box
+    if (editor->is_selecting) {
+        editor->selection_aabb.high[0] = mouse_world_pos[0];
+        editor->selection_aabb.high[1] = mouse_world_pos[1];
+
+        if (lw_isMouseButtonUp(context, 0)) {
+            if (editor->selection_aabb.low[0] > editor->selection_aabb.high[0]) swap(float, editor->selection_aabb.low[0], editor->selection_aabb.high[0]);
+            if (editor->selection_aabb.low[1] > editor->selection_aabb.high[1]) swap(float, editor->selection_aabb.low[1], editor->selection_aabb.high[1]);
+
+            // Do selection
+            editor->points_selected_len = 0;
+            for (unsigned i = 0; i < editor->points_len; ++i) {
+                if (lw_pointInAabb(editor->selection_aabb, editor->points[i])) {
+                    DYNARRAY_CHECK_CAP(editor->points_selected);
+                    editor->points_selected[editor->points_selected_len] = i;
+                    ++editor->points_selected_len;
+                }
+            }
+            editor->is_selecting = false;
+        }
+    } else {
+        if (editor->point_hover_index == ~0 && editor->point_grab_index == ~0 && lw_isMouseButtonDown(context, 0)) {
+            editor->is_selecting           = true;
+            editor->selection_aabb.low[0]  = mouse_world_pos[0];
+            editor->selection_aabb.low[1]  = mouse_world_pos[1];
+            editor->selection_aabb.high[0] = mouse_world_pos[0];
+            editor->selection_aabb.high[1] = mouse_world_pos[1];
+        }
+    }
+
     // Point grabbing
 
     if (editor->point_grab_index != ~0) {
-        if (lw_isMouseButtonUp(context, 0)) {
-            if (editor->point_hover_index != editor->point_grab_index && editor->point_hover_index != ~0) {
-                // combine points
+        if (!editor->is_moving_selection) {
+            if (lw_isMouseButtonUp(context, 0)) {
+                if (editor->point_hover_index != editor->point_grab_index && editor->point_hover_index != ~0) {
+                    // combine points
 
-                for (unsigned i = 0; i < editor->lines_len; ++i) {
-                    // remove all lines that connect the two points
-                    if ((editor->lines[i][0] == editor->point_grab_index && editor->lines[i][1] == editor->point_hover_index) ||
-                        (editor->lines[i][0] == editor->point_hover_index && editor->lines[i][1] == editor->point_grab_index)) {
-                        --editor->lines_len;
-                        editor->lines[i][0] = editor->lines[editor->lines_len][0];
-                        editor->lines[i][1] = editor->lines[editor->lines_len][1];
-                        editor->lines[i][2] = editor->lines[editor->lines_len][2];
+                    for (unsigned i = 0; i < editor->lines_len; ++i) {
+                        // remove all lines that connect the two points
+                        if ((editor->lines[i][0] == editor->point_grab_index && editor->lines[i][1] == editor->point_hover_index) ||
+                            (editor->lines[i][0] == editor->point_hover_index && editor->lines[i][1] == editor->point_grab_index)) {
+                            --editor->lines_len;
+                            editor->lines[i][0] = editor->lines[editor->lines_len][0];
+                            editor->lines[i][1] = editor->lines[editor->lines_len][1];
+                            editor->lines[i][2] = editor->lines[editor->lines_len][2];
+                        }
                     }
-                }
 
-                for (unsigned i = 0; i < editor->lines_len; ++i) {
-                    // update all lines that use grab to use hover instead
-                    if (editor->lines[i][0] == editor->point_grab_index || editor->lines[i][1] == editor->point_grab_index) {
-                        unsigned other_index = editor->lines[i][0] == editor->point_grab_index ? editor->lines[i][1] : editor->lines[i][0];
+                    for (unsigned i = 0; i < editor->lines_len; ++i) {
+                        // update all lines that use grab to use hover instead
+                        if (editor->lines[i][0] == editor->point_grab_index || editor->lines[i][1] == editor->point_grab_index) {
+                            unsigned other_index = editor->lines[i][0] == editor->point_grab_index ? editor->lines[i][1] : editor->lines[i][0];
 
-                        // check if line exists
-                        bool exists = false;
-                        for (unsigned j = 0; j < editor->lines_len; ++j) {
-                            if(j == i) continue;
-                            // if so, remove this line
+                            // check if line exists
+                            bool exists = false;
+                            for (unsigned j = 0; j < editor->lines_len; ++j) {
+                                if (j == i) continue;
+                                // if so, remove this line
 
-                            bool match0 = editor->lines[j][0] == editor->point_grab_index || editor->lines[j][0] == editor->point_hover_index;
-                            bool match1 = editor->lines[j][1] == editor->point_grab_index || editor->lines[j][1] == editor->point_hover_index;
+                                bool match0 = editor->lines[j][0] == editor->point_grab_index || editor->lines[j][0] == editor->point_hover_index;
+                                bool match1 = editor->lines[j][1] == editor->point_grab_index || editor->lines[j][1] == editor->point_hover_index;
 
-                            if (match0 && editor->lines[j][1] == other_index || match1 && editor->lines[j][0] == other_index) {
-                                --editor->lines_len;
-                                editor->lines[i][0] = editor->lines[editor->lines_len][0];
-                                editor->lines[i][1] = editor->lines[editor->lines_len][1];
-                                editor->lines[i][2] = editor->lines[editor->lines_len][2];
+                                if ((match0 && editor->lines[j][1] == other_index) || (match1 && editor->lines[j][0] == other_index)) {
+                                    --editor->lines_len;
+                                    editor->lines[i][0] = editor->lines[editor->lines_len][0];
+                                    editor->lines[i][1] = editor->lines[editor->lines_len][1];
+                                    editor->lines[i][2] = editor->lines[editor->lines_len][2];
 
-                                exists = true;
-                                break;
+                                    exists = true;
+                                    break;
+                                }
+                            }
+
+                            if (!exists) {
+                                // else, just update it
+                                if (editor->lines[i][0] == editor->point_grab_index) editor->lines[i][0] = editor->point_hover_index;
+                                if (editor->lines[i][1] == editor->point_grab_index) editor->lines[i][1] = editor->point_hover_index;
                             }
                         }
+                    }
 
-                        if (!exists) {
-                            // else, just update it
-                            if (editor->lines[i][0] == editor->point_grab_index) editor->lines[i][0] = editor->point_hover_index;
-                            if (editor->lines[i][1] == editor->point_grab_index) editor->lines[i][1] = editor->point_hover_index;
+                    // remove grabbed point
+                    --editor->points_len;
+                    editor->points[editor->point_grab_index][0] = editor->points[editor->points_len][0];
+                    editor->points[editor->point_grab_index][1] = editor->points[editor->points_len][1];
+                    // fix swap remove indices
+                    for (unsigned i = 0; i < editor->lines_len; ++i) {
+                        if (editor->lines[i][0] == editor->points_len) {
+                            editor->lines[i][0] = editor->point_grab_index;
+                        }
+                        if (editor->lines[i][1] == editor->points_len) {
+                            editor->lines[i][1] = editor->point_grab_index;
                         }
                     }
                 }
+                editor->point_grab_index = ~0;
+            } else {
+                editor->points[editor->point_grab_index][0] = mouse_world_pos[0];
+                editor->points[editor->point_grab_index][1] = mouse_world_pos[1];
+            }
+        } else {
+            if (lw_isMouseButtonUp(context, 0)) {
+                editor->point_grab_index = ~0;
+            } else {
+                lw_vec2 move_delta;
+                move_delta[0] = mouse_world_pos[0] - editor->points[editor->point_grab_index][0];
+                move_delta[1] = mouse_world_pos[1] - editor->points[editor->point_grab_index][1];
 
-                // remove grabbed point
-                --editor->points_len;
-                editor->points[editor->point_grab_index][0] = editor->points[editor->points_len][0];
-                editor->points[editor->point_grab_index][1] = editor->points[editor->points_len][1];
-                // fix swap remove indices
-                for (unsigned i = 0; i < editor->lines_len; ++i) {
-                    if (editor->lines[i][0] == editor->points_len) {
-                        editor->lines[i][0] = editor->point_grab_index;
-                    }
-                    if (editor->lines[i][1] == editor->points_len) {
-                        editor->lines[i][1] = editor->point_grab_index;
-                    }
+                // move selected points
+                for (unsigned i = 0; i < editor->points_selected_len; ++i) {
+                    unsigned j = editor->points_selected[i];
+                    editor->points[j][0] += move_delta[0];
+                    editor->points[j][1] += move_delta[1];
                 }
             }
-            editor->point_grab_index = ~0;
-        } else {
-            editor->points[editor->point_grab_index][0] = mouse_world_pos[0];
-            editor->points[editor->point_grab_index][1] = mouse_world_pos[1];
         }
     } else {
         if (lw_isMouseButtonDown(context, 0)) {
             if (editor->point_hover_index != ~0) {
-                editor->point_grab_index = editor->point_hover_index;
+                // select hovered point
+                editor->point_grab_index  = editor->point_hover_index;
+                editor->point_hover_index = ~0;
+
+                // check if grabbed point is part of selection
+                if (editor->points_selected_len > 0) {
+                    editor->is_moving_selection = false;
+                    for (unsigned i = 0; i < editor->points_selected_len; ++i) {
+                        unsigned j = editor->points_selected[i];
+                        if (editor->point_grab_index == j) {
+                            editor->is_moving_selection = true;
+                            break;
+                        }
+                    }
+
+                    // deselect if not moving selection
+                    if (!editor->is_moving_selection) {
+                        editor->points_selected_len = 0;
+                    }
+                }
             }
         }
     }
+
 
     // create new sector
 
@@ -247,7 +338,7 @@ int update(LW_Context *const context, float delta) {
 }
 
 int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
-    EditorData *editor = (EditorData *)lw_getUserData(context);
+    Editor *editor = (Editor *)lw_getUserData(context);
 
     lw_ivec2 mouse_screen_pos;
     lw_getMousePos(context, mouse_screen_pos);
@@ -258,6 +349,16 @@ int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
     lw_vec4 a = { 0, 0, 0, 1 }, b = { 0, 0, 0, 1 }, c, d;
     lw_uvec2 n;
     lw_ivec2 p, q;
+
+    LW_Aabb selection_aabb;
+    if (editor->is_selecting) {
+        selection_aabb.low[0] = editor->selection_aabb.low[0], selection_aabb.low[1] = editor->selection_aabb.low[1];
+        selection_aabb.high[0] = editor->selection_aabb.high[0], selection_aabb.high[1] = editor->selection_aabb.high[1];
+        if (selection_aabb.low[0] > selection_aabb.high[0]) swap(float, selection_aabb.low[0], selection_aabb.high[0]);
+        if (selection_aabb.low[1] > selection_aabb.high[1]) swap(float, selection_aabb.low[1], selection_aabb.high[1]);
+    }
+
+    // draw lines
     for (unsigned i = 0; i < editor->lines_len; ++i) {
         n[0] = editor->lines[i][0], n[1] = editor->lines[i][1];
         a[0] = editor->points[n[0]][0], a[1] = editor->points[n[0]][1];
@@ -276,6 +377,7 @@ int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
         }
     }
 
+    // draw new sector
     for (unsigned i = 0; i < editor->new_lines_len; ++i) {
         n[0] = editor->new_lines[i][0], n[1] = editor->new_lines[i][1];
         a[0] = editor->points[n[0]][0], a[1] = editor->points[n[0]][1];
@@ -290,6 +392,7 @@ int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
         lw_drawLine(main_frame_buffer, p, q, LW_COLOR_GREY);
     }
 
+    // draw points
     for (unsigned i = 0; i < editor->points_len; ++i) {
         a[0] = editor->points[i][0], a[1] = editor->points[i][1];
         lw_mat4MulVec4(editor->world_to_screen_mat, a, c);
@@ -300,18 +403,55 @@ int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
         };
 
         LW_Color c;
-        if (i == editor->new_sec_first_point)
+        if (editor->is_selecting && lw_pointInAabb(selection_aabb, a)) {
+            c = LW_COLOR_CYAN;
+        } else if (i == editor->new_sec_first_point) {
             c = LW_COLOR_RED;
-        else if (i == editor->point_grab_index)
-            c = LW_COLOR_GREEN;
-        else
+        } else if (i == editor->point_grab_index) {
+            c = LW_COLOR_CYAN;
+        } else {
             c = LW_COLOR_YELLOW;
+        }
 
         if (i == editor->point_hover_index || i == editor->point_grab_index) {
             lw_fillRect(main_frame_buffer, rect, c);
         } else {
             lw_drawRect(main_frame_buffer, rect, lw_shadeColor(c, 180));
         }
+    }
+
+    // selected points
+    for (unsigned i = 0; i < editor->points_selected_len; ++i) {
+        unsigned j = editor->points_selected[i];
+        a[0] = editor->points[j][0], a[1] = editor->points[j][1];
+        lw_mat4MulVec4(editor->world_to_screen_mat, a, c);
+
+        LW_Recti rect = {
+            .pos  = { c[0] - 4, c[1] - 4 },
+            .size = { 8, 8 },
+        };
+
+        LW_Color c = LW_COLOR_CYAN;
+        lw_drawRect(main_frame_buffer, rect, lw_shadeColor(c, 180));
+    }
+
+    // selection box
+    if (editor->is_selecting) {
+        a[0] = editor->selection_aabb.low[0], a[1] = editor->selection_aabb.low[1];
+        b[0] = editor->selection_aabb.high[0], b[1] = editor->selection_aabb.high[1];
+
+        if (a[0] > b[0]) swap(float, a[0], b[0]);
+        if (a[1] < b[1]) swap(float, a[1], b[1]);
+
+        lw_mat4MulVec4(editor->world_to_screen_mat, a, c);
+        lw_mat4MulVec4(editor->world_to_screen_mat, b, d);
+
+        LW_Recti rect = {
+            .pos  = { c[0], c[1] },
+            .size = { d[0] - c[0], d[1] - c[1] },
+        };
+
+        lw_drawRect(main_frame_buffer, rect, LW_COLOR_CYAN);
     }
 
     snprintf(g_text_buffer, sizeof(g_text_buffer), "Points: %u", editor->points_len);
@@ -323,8 +463,7 @@ int render(LW_Context *const context, LW_Framebuffer *const main_frame_buffer) {
 }
 
 int main() {
-    EditorData editor;
-    memset(&editor, 0, sizeof(editor));
+    Editor editor;
 
     LW_ContextInit init = {
         .title          = "LightWare Editor",
@@ -345,10 +484,7 @@ int main() {
     if (!lw_loadTexture("res/fonts/small.png", &g_font.texture)) return -1;
     g_font.char_width = g_font.texture.width / 95;
 
-    editor.screen_width      = 640;
-    editor.screen_height     = 480;
-    editor.point_grab_index  = ~0;
-    editor.point_hover_index = ~0;
+    initEditor(&editor);
 
     // if(!lw_loadPortalWorld("res/maps/map0.map", 5.0f, &editor.pod)) return -1;
     // editor.cam.pos[0] = 0.0f;

@@ -62,6 +62,25 @@ bool editorInit(Editor *const editor) {
 
 static void _input(Editor *const editor, float dt, LW_Context *const context);
 static void _recalcViewMatrices(Editor *const editor, float dt, LW_Context *const context);
+static bool _validPortalOverlap(LW_LineDef *const line0, LW_LineDef *const line1) {
+    lw_vec2 a, b, difference;
+    float sqdst;
+    a[0] = line1->start[0], a[1] = line1->start[1];
+    b[0] = line1->sector->walls[line1->next].start[0], b[1] = line1->sector->walls[line1->next].start[1];
+
+    // check
+    difference[0] = b[0] - line0->start[0];
+    difference[1] = b[1] - line0->start[1];
+    sqdst         = lw_dot2d(difference, difference);
+
+    if (sqdst > AUTO_PORTAL_EPSILON) return false;
+
+    difference[0] = a[0] - line0->sector->walls[line0->next].start[0];
+    difference[1] = a[1] - line0->sector->walls[line0->next].start[1];
+    sqdst         = lw_dot2d(difference, difference);
+
+    return sqdst <= AUTO_PORTAL_EPSILON;
+}
 
 int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
     _input(editor, dt, context);
@@ -189,7 +208,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
             } else if (lw_isKeyDown(context, LW_KeyC)) {
                 // Insert point in line
-                
+
                 // if specter select on:
                 // for every line in range, add point at mouse pos
                 // if not specter select:
@@ -197,7 +216,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                 lw_vec4 a = { 0.0f, 0.0f, 0.0f, 1.0f }, b = { 0.0f, 0.0f, 0.0f, 1.0f }, c, d;
                 lw_vec2 seg[2];
-                lw_vec4 closest_point = {0.0f, 0.0f, 0.0f, 1.0f};
+                lw_vec4 closest_point = { 0.0f, 0.0f, 0.0f, 1.0f };
                 lw_vec2 difference;
 
                 LW_SectorListNode *node = editor->world.sectors.head;
@@ -242,21 +261,21 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             new_line->start[0] = c[0], new_line->start[1] = c[1];
                             memcpy(new_line->plane, line->plane, sizeof(new_line->plane)); // point added on line means point added on plane
                             new_line->portal_sector = NULL;
-                            new_line->portal_wall = NULL;
-                            new_line->sector = sec;
+                            new_line->portal_wall   = NULL;
+                            new_line->sector        = sec;
 
                             // insert into polygon
-                            new_line->next = line->next;
-                            new_line->prev = i;
+                            new_line->next              = line->next;
+                            new_line->prev              = i;
                             sec->walls[line->next].prev = sec->num_walls - 1;
-                            line->next = sec->num_walls - 1;
+                            line->next                  = sec->num_walls - 1;
 
                             if (!editor->specter_select) goto _end_sector_loop;
                             break;
                         }
                     }
                 }
-                _end_sector_loop:
+            _end_sector_loop:
 
             } else if (lw_isKeyDown(context, LW_KeyK)) {
                 // TODO: Knife tool
@@ -309,7 +328,6 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                 if (closest != NULL) {
                     if (closest->portal_sector == NULL) {
                         // add portal
-                        float sqdst;
                         node = editor->world.sectors.head;
                         for (; node != NULL; node = node->next) {
                             LW_Sector *sec = &node->item;
@@ -317,40 +335,16 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                             for (unsigned i = 0; i < sec->num_walls; ++i) {
                                 LW_LineDef *const line = &sec->walls[i];
+                                if (_validPortalOverlap(closest, line)) {
+                                    // do the portal stuff
+                                    closest->portal_sector = sec;
+                                    closest->portal_wall   = line;
 
-                                a[0] = line->start[0], a[1] = line->start[1];
-                                b[0] = sec->walls[line->next].start[0], b[1] = sec->walls[line->next].start[1];
+                                    line->portal_sector = closest_sector;
+                                    line->portal_wall   = closest;
 
-                                // check
-                                difference[0] = a[0] - closest->start[0];
-                                difference[1] = a[1] - closest->start[1];
-                                sqdst         = lw_dot2d(difference, difference);
-
-                                if (sqdst > AUTO_PORTAL_EPSILON) {
-                                    difference[0] = b[0] - closest->start[0];
-                                    difference[1] = b[1] - closest->start[1];
-                                    sqdst         = lw_dot2d(difference, difference);
-                                    if (sqdst > AUTO_PORTAL_EPSILON) {
-                                        continue;
-                                    }
-                                    b[0] = a[0];
-                                    b[1] = a[1];
+                                    goto _end_outer;
                                 }
-
-                                difference[0] = b[0] - closest_sector->walls[closest->next].start[0];
-                                difference[1] = b[1] - closest_sector->walls[closest->next].start[1];
-                                sqdst         = lw_dot2d(difference, difference);
-
-                                if (sqdst > AUTO_PORTAL_EPSILON) continue;
-
-                                // do the portal stuff
-                                closest->portal_sector = sec;
-                                closest->portal_wall   = line;
-
-                                line->portal_sector = closest_sector;
-                                line->portal_wall   = closest;
-
-                                goto _end_outer;
                             }
                         }
                     _end_outer:
@@ -457,13 +451,34 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
         case StateMovePoints:
             if (lw_isMouseButtonUp(context, 0)) {
                 for (unsigned i = 0; i < editor->selected_points_len; ++i) {
+                    // If moving portal, check if portal should be disconnected
+                    // recalc line plane
+
                     LW_LineDef *line = editor->selected_points[i];
+                    if (line->portal_wall != NULL) {
+                        if (!_validPortalOverlap(line->portal_wall, line)) {
+                            // remove portal
+                            line->portal_wall->portal_wall   = NULL;
+                            line->portal_wall->portal_sector = NULL;
+                            line->portal_wall                = NULL;
+                            line->portal_sector              = NULL;
+                        }
+                    }
                     lw_recalcLinePlane(line);
+
                     line = &line->sector->walls[line->prev];
+                    if (line->portal_wall != NULL) {
+                        if (!_validPortalOverlap(line->portal_wall, line)) {
+                            // remove portal
+                            line->portal_wall->portal_wall   = NULL;
+                            line->portal_wall->portal_sector = NULL;
+                            line->portal_wall                = NULL;
+                            line->portal_sector              = NULL;
+                        }
+                    }
                     lw_recalcLinePlane(line);
                 }
 
-                // TODO: If moving portal, check if portal should be disconnected
 
                 editor->state = StateIdle;
                 break;

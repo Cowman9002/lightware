@@ -29,19 +29,22 @@ bool editorInit(Editor *const editor) {
     editor->c_grid       = RGB(60, 80, 120);
     editor->c_font       = RGB(240, 240, 210);
 
-    editor->c_walls      = RGB(200, 200, 200);
-    editor->c_vertices   = RGB(30, 140, 240);
-    editor->c_sel_vertex = RGB(250, 230, 80);
+    editor->c_walls    = RGB(200, 200, 200);
+    editor->c_vertices = RGB(30, 140, 240);
+    editor->c_portal   = RGB(200, 40, 80);
 
     editor->c_new_walls    = RGB(128, 128, 128);
     editor->c_new_vertices = RGB(80, 30, 240);
     editor->c_start_vertex = RGB(250, 190, 100);
 
+    editor->c_sel_vertex           = RGB(250, 230, 80);
     editor->c_selection_box        = RGB(245, 245, 125);
     editor->c_highlighted_vertices = RGB(240, 212, 30);
 
     editor->grid_active = true;
     editor->grid_size   = 1.0f;
+
+    editor->specter_select = true;
 
     editor->zoom   = 0.03;
     editor->zoom_t = inv_logerp(MIN_ZOOM, MAX_ZOOM, editor->zoom);
@@ -104,22 +107,136 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
             if (lw_isKeyDown(context, LW_KeySpace)) {
                 editor->selected_points_len = 0; // deselect all points
 
-                editor->new_sector_capacity     = 16;
-                editor->new_sector.planes       = NULL;
-                editor->new_sector.next_sectors = NULL;
+                editor->new_sector_capacity = 16;
 
                 editor->new_sector.num_sub_sectors               = 1;
                 editor->new_sector.sub_sectors                   = malloc(editor->new_sector.num_sub_sectors * sizeof(*editor->new_sector.sub_sectors));
                 editor->new_sector.sub_sectors[0].ceiling_height = 3.0f;
                 editor->new_sector.sub_sectors[0].floor_height   = 0.0f;
 
-                editor->new_sector.walls             = malloc(editor->new_sector_capacity * sizeof(*editor->new_sector.walls));
-                editor->new_sector.walls[0].start[0] = editor->mouse_snapped_pos[0];
-                editor->new_sector.walls[0].start[1] = editor->mouse_snapped_pos[1];
-                editor->new_sector.walls[0].end      = UNDEFINED;
-                editor->new_sector.num_walls         = 1;
+                editor->new_sector.walls               = malloc(editor->new_sector_capacity * sizeof(*editor->new_sector.walls));
+                editor->new_sector.walls[0].start[0]   = editor->mouse_snapped_pos[0];
+                editor->new_sector.walls[0].start[1]   = editor->mouse_snapped_pos[1];
+                editor->new_sector.walls[0].end        = UNDEFINED;
+                editor->new_sector.walls[0].prev       = UNDEFINED;
+                editor->new_sector.walls[0].next       = NULL;
+                editor->new_sector.walls[0].other_wall = NULL;
+
+                editor->new_sector.num_walls = 1;
 
                 editor->state = StateCreateSector;
+
+            } else if (lw_isKeyDown(context, LW_KeyDelete)) {
+                // TODO: Delete selected points
+
+            } else if (lw_isKeyDown(context, LW_KeyL)) {
+                // TODO: Insert point in line
+
+            } else if (lw_isKeyDown(context, LW_KeyK)) {
+                // TODO: Knife tool
+
+            } else if (lw_isKeyDown(context, LW_KeyF)) {
+                // auto portal
+                // find closest line
+                // check for any other lines with endpoints in same location
+                // set both to portals
+
+                LW_Sector *closest_sector = NULL;
+                LW_LineDef *closest       = NULL;
+                float min_dist            = LINE_SELECTION_RADIUS * LINE_SELECTION_RADIUS;
+
+                lw_vec4 a = { 0.0f, 0.0f, 0.0f, 1.0f }, b = { 0.0f, 0.0f, 0.0f, 1.0f }, c, d;
+                lw_vec2 seg[2];
+                lw_vec2 closest_point;
+                lw_vec2 difference;
+
+                LW_SectorListNode *node = editor->world.sectors.head;
+                for (; node != NULL; node = node->next) {
+                    LW_Sector *sec = &node->item;
+                    for (unsigned i = 0; i < sec->num_walls; ++i) {
+                        LW_LineDef *const line = &sec->walls[i];
+
+                        a[0] = line->start[0], a[1] = line->start[1];
+                        b[0] = sec->walls[line->end].start[0], b[1] = sec->walls[line->end].start[1];
+
+                        lw_mat4MulVec4(editor->to_screen_mat, a, c);
+                        lw_mat4MulVec4(editor->to_screen_mat, b, d);
+
+                        seg[0][0] = c[0], seg[0][1] = c[1];
+                        seg[1][0] = d[0], seg[1][1] = d[1];
+
+                        lw_closestPointOnSegment(seg, mouse_screen_posv4, closest_point);
+                        difference[0] = closest_point[0] - mouse_screen_posv4[0];
+                        difference[1] = closest_point[1] - mouse_screen_posv4[1];
+
+                        float sqdst = lw_dot2d(difference, difference);
+
+                        if (sqdst < min_dist) {
+                            closest        = line;
+                            closest_sector = sec;
+                            min_dist       = sqdst;
+                            break;
+                        }
+                    }
+                }
+
+                if (closest != NULL) {
+                    if (closest->next == NULL) {
+                        // add portal
+                        float sqdst;
+                        node = editor->world.sectors.head;
+                        for (; node != NULL; node = node->next) {
+                            LW_Sector *sec = &node->item;
+                            if (sec == closest_sector) continue; // can't be in the same sector
+
+                            for (unsigned i = 0; i < sec->num_walls; ++i) {
+                                LW_LineDef *const line = &sec->walls[i];
+
+                                a[0] = line->start[0], a[1] = line->start[1];
+                                b[0] = sec->walls[line->end].start[0], b[1] = sec->walls[line->end].start[1];
+
+                                // check
+                                difference[0] = a[0] - closest->start[0];
+                                difference[1] = a[1] - closest->start[1];
+                                sqdst         = lw_dot2d(difference, difference);
+
+                                if (sqdst > AUTO_PORTAL_EPSILON) {
+                                    difference[0] = b[0] - closest->start[0];
+                                    difference[1] = b[1] - closest->start[1];
+                                    sqdst         = lw_dot2d(difference, difference);
+                                    if (sqdst > AUTO_PORTAL_EPSILON) {
+                                        continue;
+                                    }
+                                    b[0] = a[0];
+                                    b[1] = a[1];
+                                }
+
+                                difference[0] = b[0] - closest_sector->walls[closest->end].start[0];
+                                difference[1] = b[1] - closest_sector->walls[closest->end].start[1];
+                                sqdst         = lw_dot2d(difference, difference);
+
+                                if (sqdst > AUTO_PORTAL_EPSILON) continue;
+
+                                // do the portal stuff
+                                closest->next       = sec;
+                                closest->other_wall = line;
+
+                                line->next       = closest_sector;
+                                line->other_wall = closest;
+
+                                goto _end_outer;
+                            }
+                        }
+                    _end_outer:
+                    } else {
+                        // remove portal
+                        closest->other_wall->next       = NULL;
+                        closest->other_wall->other_wall = NULL;
+                        closest->next                   = NULL;
+                        closest->other_wall             = NULL;
+                    }
+                }
+
             } else if (lw_isMouseButtonDown(context, 0)) {
                 bool shift = lw_isKey(context, LW_KeyLShift);
                 bool ctrl  = lw_isKey(context, LW_KeyLCtrl);
@@ -212,6 +329,15 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
             /////////////////////////////////////////////////////////////
         case StateMovePoints:
             if (lw_isMouseButtonUp(context, 0)) {
+                for (unsigned i = 0; i < editor->selected_points_len; ++i) {
+                    LW_LineDef *line = editor->selected_points[i];
+                    lw_recalcLinePlane(line);
+                    line = &line->sector->walls[line->prev];
+                    lw_recalcLinePlane(line);
+                }
+
+                // TODO: If moving portal, check if portal should be disconnected
+
                 editor->state = StateIdle;
                 break;
             }
@@ -306,9 +432,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                         // finish sector
 
                         editor->new_sector.walls[editor->new_sector.num_walls - 1].end = 0;
-
-                        editor->new_sector.planes       = malloc(editor->new_sector.num_walls * sizeof(*editor->new_sector.planes));
-                        editor->new_sector.next_sectors = calloc(editor->new_sector.num_walls, sizeof(*editor->new_sector.next_sectors));
+                        editor->new_sector.walls[0].prev                               = editor->new_sector.num_walls - 1;
 
                         {
                             // ensure points are counter-clockwise
@@ -319,29 +443,32 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             d = editor->new_sector.walls[c.end];
                             e = editor->new_sector.walls[d.end];
 
-                            a[0]   = d.start[0] - c.start[0];
-                            a[1]   = d.start[1] - c.start[1];
-                            b[0]   = e.start[0] - d.start[0];
-                            b[1]   = e.start[1] - d.start[1];
+                            a[0]  = d.start[0] - c.start[0];
+                            a[1]  = d.start[1] - c.start[1];
+                            b[0]  = e.start[0] - d.start[0];
+                            b[1]  = e.start[1] - d.start[1];
                             angle = lw_angleBetween2d(a, b);
 
-                            if(angle > 0.0f) {
+                            if (angle > 0.0f) {
                                 // reverse winding
 
-                                for(unsigned i = 0, j = editor->new_sector.num_walls - 1; i < editor->new_sector.num_walls; ++i) {
+                                for (unsigned i = 0, j = editor->new_sector.num_walls - 1; i < editor->new_sector.num_walls; ++i) {
                                     editor->new_sector.walls[i].end = j;
-                                    j = i;
-
+                                    j                               = i;
                                 }
                             }
                         }
 
-                        // calculate wall planes
-                        for (unsigned i = 0; i < editor->new_sector.num_walls; ++i) {
-                            lw_recalcSectorPlane(&editor->new_sector, i);
+                        LW_SectorList_push_back(&editor->world.sectors, editor->new_sector);
+                        LW_Sector *sector = &editor->world.sectors.tail->item;
+
+                        for (unsigned i = 0; i < sector->num_walls; ++i) {
+                            // set sector
+                            sector->walls[i].sector = sector;
+                            // calculate wall planes
+                            lw_recalcLinePlane(&sector->walls[i]);
                         }
 
-                        LW_SectorList_push_back(&editor->world.sectors, editor->new_sector);
 
                         editor->state = StateIdle;
                     } else {
@@ -368,7 +495,9 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                     editor->new_sector.walls[editor->new_sector.num_walls].start[0] = editor->mouse_snapped_pos[0];
                     editor->new_sector.walls[editor->new_sector.num_walls].start[1] = editor->mouse_snapped_pos[1];
                     editor->new_sector.walls[editor->new_sector.num_walls].end      = UNDEFINED;
+                    editor->new_sector.walls[editor->new_sector.num_walls].next     = NULL;
 
+                    editor->new_sector.walls[editor->new_sector.num_walls].prev    = editor->new_sector.num_walls - 1;
                     editor->new_sector.walls[editor->new_sector.num_walls - 1].end = editor->new_sector.num_walls;
 
                     ++editor->new_sector.num_walls;
@@ -436,15 +565,21 @@ int editor2dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
                     x[0] = c[0], x[1] = c[1];
                     y[0] = d[0], y[1] = d[1];
 
-                    lw_drawLine(framebuffer, x, y, editor->c_walls);
+                    LW_Color color;
+                    if (line.next != NULL)
+                        color = editor->c_portal;
+                    else
+                        color = editor->c_walls;
+
+                    lw_drawLine(framebuffer, x, y, color);
 
                     // draw normal
                     x[0] = (d[0] + c[0]) * 0.5f;
                     x[1] = (d[1] + c[1]) * 0.5f;
-                    y[0] = x[0] + sec->planes[i][0] * 8.0f;
-                    y[1] = x[1] - sec->planes[i][1] * 8.0f;
+                    y[0] = x[0] + line.plane[0] * 8.0f;
+                    y[1] = x[1] - line.plane[1] * 8.0f;
 
-                    lw_drawLine(framebuffer, x, y, editor->c_walls);
+                    lw_drawLine(framebuffer, x, y, color);
                 }
 
                 circle.pos[0] = c[0];

@@ -415,7 +415,7 @@ LIGHTWARE_API void lw_fillCircle(LW_Framebuffer *const framebuffer, LW_Circlei c
 LIGHTWARE_API void lw_drawCircle(LW_Framebuffer *const framebuffer, LW_Circlei circle, LW_Color color);
 
 LIGHTWARE_API void lw_drawLine(LW_Framebuffer *const framebuffer, lw_ivec2 v0, lw_ivec2 v1, LW_Color color);
-LIGHTWARE_API void lw_drawPoly(LW_Framebuffer *const framebuffer, lw_ivec2 *vertices, unsigned num_vertices, LW_Color color);
+LIGHTWARE_API void lw_drawPoly(LW_Framebuffer *const framebuffer, lw_vec2 *vertices, unsigned num_vertices, LW_Color color);
 
 LIGHTWARE_API void lw_drawString(LW_Framebuffer *const framebuffer, lw_ivec2 pos, LW_Color draw_color, LW_FontTexture font, const char *text);
 
@@ -427,16 +427,21 @@ typedef struct LW_Subsector {
     float floor_height, ceiling_height;
 } LW_Subsector;
 
+typedef struct LW_Sector LW_Sector;
 typedef struct LW_LineDef {
     lw_vec2 start; // position
     unsigned end;  // index to other linedef
+    unsigned prev;  // index to last linedef
+    LW_Sector *sector;
+
+    lw_vec4 plane;
+    LW_Sector *next;
+    struct LW_LineDef *other_wall;
 } LW_LineDef;
 
 typedef struct LW_Sector {
     unsigned num_walls;
     LW_LineDef *walls;               // list
-    lw_vec4 *planes;                 // list
-    struct LW_Sector **next_sectors; // list
 
     // definitions of sub sectors for sector over sector
     unsigned num_sub_sectors;
@@ -481,7 +486,7 @@ LIGHTWARE_API void lw_calcCameraProjection(LW_Camera *const cam);
 LIGHTWARE_API LW_Frustum lw_calcFrustumFromPoly(lw_vec3 *polygon, unsigned num_verts, lw_vec3 view_point);
 
 LIGHTWARE_API bool lw_loadPortalWorld(const char *path, float scale, LW_PortalWorld *o_pod);
-LIGHTWARE_API void lw_recalcSectorPlane(LW_Sector *sector, unsigned i);
+LIGHTWARE_API void lw_recalcLinePlane(LW_LineDef *const linedef);
 
 LIGHTWARE_API void lw_freeSubsector(LW_Subsector subsector);
 LIGHTWARE_API void lw_freeSector(LW_Sector sector);

@@ -11,6 +11,9 @@
 #define TEXT_BUFFER_SIZE 64
 
 #define POINT_RENDER_RADIUS 4
+#define LINE_SELECTION_RADIUS 3
+
+#define AUTO_PORTAL_EPSILON 0.003
 
 typedef enum State {
     StateIdle = 0,
@@ -25,9 +28,9 @@ typedef struct Editor {
     int width, height;
 
     LW_Color c_background, c_grid, c_font;
-    LW_Color c_walls, c_vertices, c_sel_vertex;
+    LW_Color c_walls, c_vertices, c_portal;
     LW_Color c_new_walls, c_new_vertices, c_start_vertex;
-    LW_Color c_selection_box, c_highlighted_vertices;
+    LW_Color c_sel_vertex, c_selection_box, c_highlighted_vertices;
 
     // 3d mode
     bool view_3d;

@@ -154,10 +154,10 @@ void lw_drawRect(LW_Framebuffer *const framebuffer, LW_Recti rect, LW_Color colo
 
 // http://fredericgoset.ovh/mathematiques/courbes/en/filled_circle.html
 void lw_fillCircle(LW_Framebuffer *const framebuffer, LW_Circlei circle, LW_Color color) {
-    if(circle.pos[0] + circle.radius < 0) return;
-    if(circle.pos[0] - circle.radius >= (int)framebuffer->width) return;
-    if(circle.pos[1] + circle.radius < 0) return;
-    if(circle.pos[1] - circle.radius >= (int)framebuffer->height) return;
+    if (circle.pos[0] + circle.radius < 0) return;
+    if (circle.pos[0] - circle.radius >= (int)framebuffer->width) return;
+    if (circle.pos[1] + circle.radius < 0) return;
+    if (circle.pos[1] - circle.radius >= (int)framebuffer->height) return;
 
     int x = 0;
     int y = circle.radius;
@@ -260,11 +260,17 @@ void lw_drawLine(LW_Framebuffer *const framebuffer, lw_ivec2 v0, lw_ivec2 v1, LW
     }
 }
 
-void lw_drawPoly(LW_Framebuffer *const framebuffer, lw_ivec2 *vertices, unsigned num_vertices, LW_Color color) {
+void lw_drawPoly(LW_Framebuffer *const framebuffer, lw_vec2 *vertices, unsigned num_vertices, LW_Color color) {
+    lw_ivec2 a, b;
+    a[0] = vertices[0][0], a[1] = vertices[0][1];
     for (unsigned i = 1; i < num_vertices; ++i) {
-        lw_drawLine(framebuffer, vertices[i - 1], vertices[i], color);
+        b[0] = vertices[i][0], b[1] = vertices[i][1];
+        lw_drawLine(framebuffer, a, b, color);
+        a[0] = b[0], a[1] = b[1];
     }
-    lw_drawLine(framebuffer, vertices[num_vertices - 1], vertices[0], color);
+
+    b[0] = vertices[0][0], b[1] = vertices[0][1];
+    lw_drawLine(framebuffer, a, b, color);
 }
 
 //

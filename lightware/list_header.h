@@ -35,6 +35,7 @@ LIGHTWARE_API bool LIST_METHOD(pop_front)(LIST_TAG *const list, LIST_ITEM_TYPE *
 LIGHTWARE_API bool LIST_METHOD(pop_back)(LIST_TAG *const list, LIST_ITEM_TYPE *o_item);
 LIGHTWARE_API bool LIST_METHOD(remove_at)(LIST_TAG *const list, size_t location, LIST_ITEM_TYPE *o_item);
 LIGHTWARE_API bool LIST_METHOD(remove)(LIST_TAG *const list, LIST_ITEM_TYPE *item);
+LIGHTWARE_API unsigned LIST_METHOD(find_index)(LIST_TAG *const list, LIST_ITEM_TYPE *item);
 
 #undef LIST_TAG
 #undef LIST_ITEM_TYPE

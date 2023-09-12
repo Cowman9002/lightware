@@ -1,13 +1,13 @@
 [x] Render sector
 [x] Portal clipping
 [x] Sector over sector
-[x] Map file loading
-[ ] Convert main engine to dll
+[x] Convert main engine to dll
+[ ] Map file saving
+[ ] Map file loading
+[ ] Create level editor
 [ ] Allow concave and holes in sectors
 [ ] Floors and ceilings defined by planes
 [ ] Invisible floors and ceilings when two tiers overlap
-[ ] Create level editor
-[ ] Map file saving
 [ ] Active edges a la https://www.flipcode.com/archives/Building_a_3D_Portal_Engine-Issue_16_More_On_Portals.shtml
 [ ] Polygon filling
 [ ] Skybox

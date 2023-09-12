@@ -106,7 +106,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
         editor->cam3d.sector = lw_getSector(editor->world, editor->cam3d.pos);
         if (editor->cam3d.sector != NULL) {
-            editor->cam3d.pos[2] = editor->cam3d.sector->sub_sectors[0].floor_height + CAMERA_3D_HEIGHT;
+            editor->cam3d.pos[2] = editor->cam3d.sector->subsectors[0].floor_height + CAMERA_3D_HEIGHT;
         }
 
         return LW_EXIT_OK;
@@ -128,10 +128,10 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                 editor->new_sector_capacity = 16;
 
-                editor->new_sector.num_sub_sectors               = 1;
-                editor->new_sector.sub_sectors                   = malloc(editor->new_sector.num_sub_sectors * sizeof(*editor->new_sector.sub_sectors));
-                editor->new_sector.sub_sectors[0].ceiling_height = 3.0f;
-                editor->new_sector.sub_sectors[0].floor_height   = 0.0f;
+                editor->new_sector.num_subsectors               = 1;
+                editor->new_sector.subsectors                   = malloc(editor->new_sector.num_subsectors * sizeof(*editor->new_sector.subsectors));
+                editor->new_sector.subsectors[0].ceiling_height = 3.0f;
+                editor->new_sector.subsectors[0].floor_height   = 0.0f;
 
                 editor->new_sector.walls                  = malloc(editor->new_sector_capacity * sizeof(*editor->new_sector.walls));
                 editor->new_sector.walls[0].start[0]      = editor->mouse_snapped_pos[0];

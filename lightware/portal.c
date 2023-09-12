@@ -123,296 +123,6 @@ void lw_screenPointToRay(LW_Camera cam, int width, int height, lw_vec2 point, lw
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define LOAD_MIN_SUPPORTED_VERSION 1
-#define LOAD_MAX_SUPPORTED_VERSION 1
-
-bool lw_loadPortalWorld(const char *path, float scale, LW_PortalWorld *o_pod) {
-    assert(o_pod != NULL);
-
-    //     LW_SectorList_init(&o_pod->sectors);
-
-    //     FILE *file = fopen(path, "r");
-    //     if (file == NULL) {
-    //         printf("Failed to open %s\n", path);
-    //         return false;
-    //     }
-
-    //     enum LoadState {
-    //         state_version,
-    //         state_open,
-    //         state_sector,
-    //         state_poly,
-    //         state_subsec,
-    //     } state = state_version;
-
-    //     unsigned file_version;
-
-    //     char line[1024];
-    //     unsigned line_index = 0;
-
-    //     char directive[64];
-    //     int params_read = 0;
-    //     unsigned unsigned_buffer[2];
-
-    //     size_t sector_cache_len = 0, sector_cache_cap = 64;
-    //     LW_Sector **sector_cache = malloc(sector_cache_cap * sizeof(*sector_cache));
-
-    //     LW_Sector tmp_sector;
-    //     bool polys_defined;
-    //     bool discard_subsect_data;
-    //     unsigned num_polys_read;
-    //     unsigned num_subsecs_read;
-
-    //     memset(&tmp_sector, 0, sizeof(tmp_sector));
-
-    //     while (fgets(line, sizeof(line), file)) {
-    //         ++line_index;
-    //         params_read = sscanf(line, "%64s", directive);
-
-    //         // empty line
-    //         if (params_read < 1) continue;
-
-    //         // comment
-    //         if (directive[0] == '/' && directive[1] == '/') continue;
-
-    //         switch (state) {
-    //             case state_version:
-    //                 // get the version number
-    //                 if (strcmp(directive, "VERSION") == 0) {
-    //                     params_read = sscanf(line, "%*s %u", &file_version);
-    //                     if (params_read != 1) {
-    //                         printf("ERROR %s:%u: `VERSION` expects one parameter\n", path, line_index);
-    //                         goto _error_return;
-    //                     }
-
-    //                     // check version is supported
-    //                     if (file_version < LOAD_MIN_SUPPORTED_VERSION ||
-    //                         file_version > LOAD_MAX_SUPPORTED_VERSION) {
-    //                         printf("ERROR %s:%u: Version %u is not supported\n", path, line_index, file_version);
-    //                         goto _error_return;
-    //                     }
-
-    //                     state = state_open;
-
-    //                 } else {
-    //                     printf("ERROR %s:%u: Expected `VERSION` as first directive\n", path, line_index);
-    //                     goto _error_return;
-    //                 }
-    //                 break;
-
-    //             case state_open:
-    //                 if (strcmp(directive, "SECTOR") == 0) {
-    //                     params_read = sscanf(line, "%*s %u %u", &unsigned_buffer[0], &unsigned_buffer[1]);
-    //                     if (params_read != 2) {
-    //                         printf("ERROR %s:%u: `SECTOR` expects two parameters\n", path, line_index);
-    //                         goto _error_return;
-    //                     }
-
-    //                     // clear items for sector state
-    //                     memset(&tmp_sector, 0, sizeof(tmp_sector));
-    //                     tmp_sector.num_walls       = unsigned_buffer[0];
-    //                     tmp_sector.num_sub_sectors = unsigned_buffer[1];
-
-    //                     polys_defined    = false;
-    //                     num_polys_read   = 0;
-    //                     num_subsecs_read = 0;
-
-    //                     // init memory
-    //                     tmp_sector.points       = malloc(tmp_sector.num_walls * 2 * sizeof(*tmp_sector.points));
-    //                     tmp_sector.planes       = malloc(tmp_sector.num_walls * sizeof(*tmp_sector.planes));
-    //                     tmp_sector.next_sectors = malloc(tmp_sector.num_walls * sizeof(*tmp_sector.next_sectors));
-    //                     tmp_sector.sub_sectors  = malloc(tmp_sector.num_sub_sectors * sizeof(*tmp_sector.sub_sectors));
-
-    //                     state = state_sector;
-
-    //                 } else {
-    //                     printf("ERROR %s:%u: Unrecognized directive `%s`\n", path, line_index, directive);
-    //                     goto _error_return;
-    //                 }
-
-    //                 break;
-
-    //             case state_sector:
-    //                 if (strcmp(directive, "END") == 0) {
-    //                     state = state_open;
-
-    //                     if (num_subsecs_read < tmp_sector.num_sub_sectors) {
-    //                         printf("ERROR %s:%u: Expected %u subsectors, but only %u defined\n", path, line_index, tmp_sector.num_sub_sectors, num_subsecs_read);
-    //                         goto _error_return;
-    //                     }
-
-    //                     // finish sector
-    //                     LW_SectorList_push_back(&o_pod->sectors, tmp_sector);
-    //                     memset(&tmp_sector, 0, sizeof(tmp_sector));
-
-    //                     if (sector_cache_len >= sector_cache_cap) {
-    //                         // realloc to make room for stuff
-    //                         sector_cache_cap += 64;
-    //                         sector_cache = realloc(sector_cache, sector_cache_cap * sizeof(*sector_cache));
-    //                     }
-    //                     sector_cache[sector_cache_len] = &o_pod->sectors.tail->item;
-    //                     ++sector_cache_len;
-
-    //                 } else if (strcmp(directive, "POLY") == 0) {
-    //                     // ensure poly is only defined once
-    //                     if (polys_defined) {
-    //                         printf("ERROR %s:%u: `POLY` defined more than once\n", path, line_index);
-    //                         goto _error_return;
-    //                     }
-    //                     polys_defined = true;
-
-    //                     state = state_poly;
-
-    //                 } else if (strcmp(directive, "SUB") == 0) {
-
-    //                     // avoid overflow
-    //                     if (num_subsecs_read >= tmp_sector.num_sub_sectors) {
-    //                         printf("WARNING:%s:%u: Only %u subsectors designated, extra discarded\n", path, line_index, tmp_sector.num_sub_sectors);
-    //                         discard_subsect_data = true;
-    //                     } else {
-    //                         discard_subsect_data = false;
-    //                     }
-
-    //                     params_read = sscanf(line, "%*s %f %f",
-    //                                          &tmp_sector.sub_sectors[num_subsecs_read].floor_height,
-    //                                          &tmp_sector.sub_sectors[num_subsecs_read].ceiling_height);
-    //                     if (params_read != 2) {
-    //                         printf("ERROR %s:%u: `SUB` expects two parameters\n", path, line_index);
-    //                         goto _error_return;
-    //                     }
-
-    //                     // change state
-    //                     state = state_subsec;
-
-    //                 } else {
-    //                     printf("ERROR %s:%u: Unrecognized directive in `SECTOR`: `%s`\n", path, line_index, directive);
-    //                     goto _error_return;
-    //                 }
-    //                 break;
-
-    //             case state_poly:
-    //                 if (strcmp(directive, "END") == 0) {
-    //                     if (num_polys_read < tmp_sector.num_walls) {
-    //                         printf("ERRROR:%s:%u: Expected %u vertices, but only %u defined\n", path, line_index, tmp_sector.num_walls, num_polys_read);
-    //                         goto _error_return;
-    //                     }
-
-    //                     // calculate wall planes
-    //                     for (unsigned i = 0; i < tmp_sector.num_walls; ++i) {
-    //                         unsigned j = (i + 1) % tmp_sector.num_walls;
-    //                         lw_vec3 p0 = { 0 }, p1 = { 0 };
-    //                         p0[0] = tmp_sector.points[i][0];
-    //                         p0[1] = tmp_sector.points[i][1];
-    //                         p1[0] = tmp_sector.points[j][0];
-    //                         p1[1] = tmp_sector.points[j][1];
-
-    //                         lw_vec2 normal;
-    //                         normal[0] = -(p1[1] - p0[1]);
-    //                         normal[1] = (p1[0] - p0[0]);
-    //                         lw_normalize2d(normal);
-
-    //                         float d = lw_dot2d(normal, p0);
-
-    //                         tmp_sector.planes[i][0] = normal[0];
-    //                         tmp_sector.planes[i][1] = normal[1];
-    //                         tmp_sector.planes[i][2] = 0.0f;
-    //                         tmp_sector.planes[i][3] = d;
-    //                     }
-
-    //                     // finish up
-    //                     state = state_sector;
-
-    //                 } else {
-    //                     // avoid overflow
-    //                     if (num_polys_read >= tmp_sector.num_walls) {
-    //                         printf("WARNING:%s:%u: Only %u vertices designated, extra discarded\n", path, line_index, tmp_sector.num_walls);
-    //                         break;
-    //                     }
-
-    //                     // get data from the line
-    //                     params_read = sscanf(line, "%f %f %u",
-    //                                          &tmp_sector.points[num_polys_read][0],
-    //                                          &tmp_sector.points[num_polys_read][1],
-    //                                          &unsigned_buffer[0]);
-    //                     if (params_read != 3) {
-    //                         printf("ERROR %s:%u: `POLY:line` expects three parameters\n", path, line_index);
-    //                         goto _error_return;
-    //                     }
-
-    //                     tmp_sector.points[num_polys_read][0] *= scale;
-    //                     tmp_sector.points[num_polys_read][1] *= scale;
-
-    //                     // pointer, but I can use it temporarily as an int
-    //                     tmp_sector.next_sectors[num_polys_read] = (LW_Sector *)(intptr_t)unsigned_buffer[0];
-
-    //                     // keep track of number of polygons read
-    //                     ++num_polys_read;
-    //                 }
-    //                 break;
-
-    //             case state_subsec:
-    //                 if (strcmp(directive, "END") == 0) {
-    //                     // keep track of number of subsectors read
-    //                     ++num_subsecs_read;
-
-    //                     state = state_sector;
-
-    //                 } else {
-    //                     // TODO: Read subsector information
-    //                     if (!discard_subsect_data) {
-    //                     }
-    //                 }
-    //                 break;
-    //         }
-    //     }
-    //     fclose(file);
-
-
-    //     LW_SectorListNode *node = o_pod->sectors.head;
-    //     while (node != NULL) {
-    //         LW_Sector *sector = &node->item;
-    //         lw_vec2 point_b = {sector->points[0][0], sector->points[0][1]};
-
-    //         for (unsigned i = sector->num_walls; i > 0;) {
-    //             --i;
-
-    //             // convert linear polygon point definition to wall based
-    //             // starting from end: last wall == last_point, first_point
-    //             // second to last == second_to_last, last_point
-    //             sector->points[i * 2][0] = sector->points[i][0];
-    //             sector->points[i * 2][1] = sector->points[i][1];
-    //             sector->points[i * 2 + 1][0] = point_b[0];
-    //             sector->points[i * 2 + 1][1] = point_b[1];
-
-    //             point_b[0] = sector->points[i][0];
-    //             point_b[1] = sector->points[i][1];
-
-    //             // convert portal sector indices to pointers
-    //             unsigned next = (unsigned)(intptr_t)sector->next_sectors[i];
-    //             if (next != 0) {
-    //                 --next;
-    //                 if (next >= sector_cache_len) {
-    //                     printf("ERROR %s: Sector next index out of defined sector bounds: %u\n", path, next);
-    //                     goto _error_return;
-    //                 }
-
-    //                 sector->next_sectors[i] = sector_cache[(size_t)next];
-    //             }
-    //         }
-
-    //         node = node->next;
-    //     }
-
-    //     free(sector_cache);
-    //     return true;
-
-    // _error_return:
-    //     free(sector_cache);
-    //     lw_freeSector(tmp_sector);
-    //     lw_freePortalWorld(*o_pod);
-    return false;
-}
-
 void lw_recalcLinePlane(LW_LineDef *const linedef) {
     LW_Sector *const sector = linedef->sector;
     lw_vec2 p0 = { 0 }, p1 = { 0 };
@@ -439,12 +149,12 @@ void lw_freeSubsector(LW_Subsector subsector) {
 }
 
 void lw_freeSector(LW_Sector sector) {
-    for (unsigned i = 0; i < sector.num_sub_sectors; ++i) {
-        lw_freeSubsector(sector.sub_sectors[i]);
+    for (unsigned i = 0; i < sector.num_subsectors; ++i) {
+        lw_freeSubsector(sector.subsectors[i]);
     }
 
     free(sector.walls);
-    free(sector.sub_sectors);
+    free(sector.subsectors);
 }
 
 void lw_freePortalWorld(LW_PortalWorld pod) {
@@ -498,8 +208,8 @@ unsigned lw_getSubSector(LW_Sector *sector, lw_vec3 point) {
     if (sector == NULL) return 0;
     unsigned res = 0;
 
-    for (unsigned i = 0; i < sector->num_sub_sectors; ++i) {
-        if (point[2] < sector->sub_sectors[i].floor_height) {
+    for (unsigned i = 0; i < sector->num_subsectors; ++i) {
+        if (point[2] < sector->subsectors[i].floor_height) {
             return res;
         } else {
             res = i;
@@ -540,12 +250,12 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
     lw_vec2 screen_points[CLIP_BUFFER_SIZE];
 
     LW_Sector *sector_queue[SECTOR_QUEUE_SIZE];
-    unsigned sub_sector_queue[SECTOR_QUEUE_SIZE];
+    unsigned subsector_queue[SECTOR_QUEUE_SIZE];
     LW_Frustum frustum_queue[SECTOR_QUEUE_SIZE];
     unsigned sector_queue_start = 0, sector_queue_end = 0;
 
     sector_queue[sector_queue_end]     = cam.sector != NULL ? cam.sector : default_sector;
-    sub_sector_queue[sector_queue_end] = cam.sector != NULL ? cam.sub_sector : 0;
+    subsector_queue[sector_queue_end] = cam.sector != NULL ? cam.subsector : 0;
     frustum_queue[sector_queue_end]    = start_frustum;
     sector_queue_end                   = (sector_queue_end + 1) % SECTOR_QUEUE_SIZE;
 
@@ -554,11 +264,11 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
     while (sector_queue_start != sector_queue_end) {
         ++sector_id;
         LW_Sector *sector   = sector_queue[sector_queue_start];
-        unsigned sub_sector = sub_sector_queue[sector_queue_start];
+        unsigned subsector = subsector_queue[sector_queue_start];
         LW_Frustum frustum  = frustum_queue[sector_queue_start];
         sector_queue_start  = (sector_queue_start + 1) % SECTOR_QUEUE_SIZE;
 
-        LW_Subsector def = sector->sub_sectors[sub_sector];
+        LW_Subsector def = sector->subsectors[subsector];
 
         for (unsigned index0 = 0; index0 < sector->num_walls; ++index0) {
             lw_vec2 p0 = { 0 }, p1 = { 0 };
@@ -618,8 +328,8 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
 
                 float max_ceiling = def.floor_height;
                 float step_bottom = def.floor_height;
-                for (unsigned ssid = 0; ssid < portal_sector->num_sub_sectors; ++ssid) {
-                    LW_Subsector next_def = portal_sector->sub_sectors[ssid];
+                for (unsigned ssid = 0; ssid < portal_sector->num_subsectors; ++ssid) {
+                    LW_Subsector next_def = portal_sector->subsectors[ssid];
                     if (next_def.ceiling_height <= def.floor_height ||
                         next_def.floor_height >= def.ceiling_height) continue;
 
@@ -676,7 +386,7 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
 
                         // draw next sector
                         sector_queue[sector_queue_end]     = portal_sector;
-                        sub_sector_queue[sector_queue_end] = ssid;
+                        subsector_queue[sector_queue_end] = ssid;
                         frustum_queue[sector_queue_end]    = next_frustum;
                         sector_queue_end                   = (sector_queue_end + 1) % SECTOR_QUEUE_SIZE;
                     }

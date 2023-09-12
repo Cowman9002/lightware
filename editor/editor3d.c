@@ -27,7 +27,7 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
     LW_Subsector *subsector = NULL;
 
     if (sector != NULL) {
-        subsector = &sector->sub_sectors[editor->cam3d.sub_sector];
+        subsector = &sector->subsectors[editor->cam3d.subsector];
         casting   = true;
     }
 
@@ -100,7 +100,7 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
             LW_LineDef const *line = &sector->walls[editor->ray_hit_type - RayHitType_Wall0];
             if (line->portal_sector != NULL) {
                 unsigned s = lw_getSubSector(line->portal_sector, editor->intersect_point);
-                subsector  = &line->portal_sector->sub_sectors[s];
+                subsector  = &line->portal_sector->subsectors[s];
                 if (editor->intersect_point[2] >= subsector->floor_height && editor->intersect_point[2] <= subsector->ceiling_height) {
                     // continue casting
                     sector  = line->portal_sector;
@@ -246,7 +246,7 @@ static void _input(Editor *const editor, float dt, LW_Context *const context) {
     editor->cam3d.pos[2] += z * dt * 5.0f;
 
     editor->cam3d.sector     = lw_getSector(editor->world, editor->cam3d.pos);
-    editor->cam3d.sub_sector = lw_getSubSector(editor->cam3d.sector, editor->cam3d.pos);
+    editor->cam3d.subsector = lw_getSubSector(editor->cam3d.sector, editor->cam3d.pos);
 
     lw_mat4 translation, rotation, rot_yaw, rot_pitch;
 

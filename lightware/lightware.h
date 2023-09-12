@@ -447,8 +447,8 @@ typedef struct LW_Sector {
     LW_LineDef *walls;               // list
 
     // definitions of sub sectors for sector over sector
-    unsigned num_sub_sectors;
-    LW_Subsector *sub_sectors; // list
+    unsigned num_subsectors;
+    LW_Subsector *subsectors; // list
 } LW_Sector;
 
 #define LIST_TAG LW_SectorList
@@ -467,7 +467,7 @@ typedef struct LW_Frustum {
 
 typedef struct LW_Camera {
     LW_Sector *sector;
-    unsigned sub_sector;
+    unsigned subsector;
 
     lw_vec3 pos;
     float yaw, pitch;
@@ -489,7 +489,9 @@ LIGHTWARE_API void lw_calcCameraProjection(LW_Camera *const cam);
 LIGHTWARE_API LW_Frustum lw_calcFrustumFromPoly(lw_vec3 *polygon, unsigned num_verts, lw_vec3 view_point);
 LIGHTWARE_API void lw_screenPointToRay(LW_Camera cam, int width, int height, lw_vec2 point, lw_vec3 o_pos, lw_vec3 o_dir);
 
-LIGHTWARE_API bool lw_loadPortalWorld(const char *path, float scale, LW_PortalWorld *o_pod);
+LIGHTWARE_API bool lw_loadPortalWorld(const char *path, LW_PortalWorld *o_pod);
+LIGHTWARE_API bool lw_savePortalWorld(const char *path, LW_PortalWorld pod);
+
 LIGHTWARE_API void lw_recalcLinePlane(LW_LineDef *const linedef);
 
 LIGHTWARE_API void lw_freeSubsector(LW_Subsector subsector);

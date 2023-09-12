@@ -49,6 +49,11 @@ int main() {
 }
 
 int editorUpdate(Editor *const editor, float dt, LW_Context *const context) {
+    if(lw_isKeyDown(context, LW_KeyS) && (lw_isKey(context, LW_KeyLCtrl) || lw_isKey(context, LW_KeyLCtrl))) {
+        lw_savePortalWorld("world.pod", editor->world);
+        printf("Saved file to 'world.pod'\n");
+    }
+
     if(editor->view_3d) {
         return editor3dUpdate(editor, dt, context);
     } else {

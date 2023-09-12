@@ -194,6 +194,25 @@ bool LIST_METHOD(remove)(LIST_TAG *const list, LIST_ITEM_TYPE *item) {
     return false;
 }
 
+unsigned LIST_METHOD(find_index)(LIST_TAG *const list, LIST_ITEM_TYPE *item) {
+    if(list->num_nodes == 0) return 0;
+
+    if (&list->head->item == item) {
+        return 0;
+    } else if (&list->tail->item == item) {
+        return list->num_nodes - 1;
+    }
+
+    LIST_NODE_TAG *node = list->head->next;
+    for (unsigned i = 0; node != NULL; node = node->next, ++i) {
+        if (&node->item == item) {
+            return i;
+        }
+    }
+
+    return list->num_nodes;
+}
+
 #undef LIST_TAG
 #undef LIST_ITEM_TYPE
 #undef LIST_CONCAT

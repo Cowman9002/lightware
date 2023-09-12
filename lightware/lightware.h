@@ -430,13 +430,13 @@ typedef struct LW_Subsector {
 typedef struct LW_Sector LW_Sector;
 typedef struct LW_LineDef {
     lw_vec2 start; // position
-    unsigned end;  // index to other linedef
+    unsigned next;  // index to other linedef
     unsigned prev;  // index to last linedef
     LW_Sector *sector;
 
     lw_vec4 plane;
-    LW_Sector *next;
-    struct LW_LineDef *other_wall;
+    LW_Sector *portal_sector;
+    struct LW_LineDef *portal_wall;
 } LW_LineDef;
 
 typedef struct LW_Sector {

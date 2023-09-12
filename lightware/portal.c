@@ -541,9 +541,9 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
             float back_face_test = lw_dot3d(linedef.plane, cam.pos);
             if (back_face_test < linedef.plane[3]) continue;
 
-            LW_Sector *next = linedef.next;
+            LW_Sector *portal_sector = linedef.portal_sector;
 
-            if (next == NULL) {
+            if (portal_sector == NULL) {
                 // render whole wall
 
                 // init clipping list
@@ -586,8 +586,8 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
 
                 float max_ceiling = def.floor_height;
                 float step_bottom = def.floor_height;
-                for (unsigned ssid = 0; ssid < next->num_sub_sectors; ++ssid) {
-                    LW_Subsector next_def = next->sub_sectors[ssid];
+                for (unsigned ssid = 0; ssid < portal_sector->num_sub_sectors; ++ssid) {
+                    LW_Subsector next_def = portal_sector->sub_sectors[ssid];
                     if (next_def.ceiling_height <= def.floor_height ||
                         next_def.floor_height >= def.ceiling_height) continue;
 
@@ -643,7 +643,7 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
                         LW_Frustum next_frustum = lw_calcFrustumFromPoly(clipped_poly, clipped_len, cam.pos); // TODO add far plane
 
                         // draw next sector
-                        sector_queue[sector_queue_end]     = next;
+                        sector_queue[sector_queue_end]     = portal_sector;
                         sub_sector_queue[sector_queue_end] = ssid;
                         frustum_queue[sector_queue_end]    = next_frustum;
                         sector_queue_end                   = (sector_queue_end + 1) % SECTOR_QUEUE_SIZE;

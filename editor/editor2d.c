@@ -126,10 +126,68 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                 editor->state = StateCreateSector;
 
-            } else if (lw_isKeyDown(context, LW_KeyDelete)) {
-                // TODO: Delete selected points
+            } else if (lw_isKeyDown(context, LW_KeyX)) {
+                // delete selected points
+                for (unsigned i = 0; i < editor->selected_points_len; ++i) {
+                    LW_LineDef *line  = editor->selected_points[i];
+                    LW_Sector *sector = line->sector;
 
-            } else if (lw_isKeyDown(context, LW_KeyL)) {
+                    // early out and remove sector
+                    if (sector->num_walls <= 3) {
+                        // remove all selected points from that sector
+                        unsigned n = editor->selected_points_len;
+                        for (unsigned j = i + 1; j < n; ++j) {
+                            if(sector->num_walls == 0) break;
+                            LW_LineDef *jline = editor->selected_points[j];
+                            if (jline->sector == sector) {
+                                // swap remove
+                                --sector->num_walls;
+                                --editor->selected_points_len;
+                                editor->selected_points[j] = editor->selected_points[editor->selected_points_len];
+                            }
+                        }
+
+                        // do remove
+                        LW_SectorList_remove(&editor->world.sectors, sector);
+                        continue;
+                    }
+
+                    // fill in missing wall
+                    LW_LineDef *prev = &sector->walls[line->prev];
+                    LW_LineDef *end  = &sector->walls[line->end];
+                    unsigned index   = prev->end;
+
+                    prev->end = line->end;
+                    end->prev = line->prev;
+                    lw_recalcLinePlane(prev);
+
+                    // remove portal if needed
+                    if(line->next != NULL) {
+                        line->other_wall->other_wall = NULL;
+                        line->other_wall->next = NULL;
+                        line->other_wall = NULL;
+                        line->next = NULL;
+                    }
+                    
+                    if(prev->next != NULL) {
+                        prev->other_wall->other_wall = NULL;
+                        prev->other_wall->next = NULL;
+                        prev->other_wall = NULL;
+                        prev->next = NULL;
+                    }
+
+                    // swap remove
+                    --sector->num_walls;
+                    if (&sector->walls[sector->num_walls] != line) {
+                        memcpy(line, &sector->walls[sector->num_walls], sizeof(*line));
+                        sector->walls[line->prev].end = index;
+                        sector->walls[line->end].prev = index;
+                    }
+                }
+
+                editor->selected_points_len = 0;
+
+            } else if (lw_isKeyDown(context, LW_KeyC)) {
                 // TODO: Insert point in line
 
             } else if (lw_isKeyDown(context, LW_KeyK)) {
@@ -239,9 +297,10 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
             } else if (lw_isMouseButtonDown(context, 0)) {
                 bool shift = lw_isKey(context, LW_KeyLShift);
+                bool alt   = lw_isKey(context, LW_KeyLAlt);
                 bool ctrl  = lw_isKey(context, LW_KeyLCtrl);
 
-                if (ctrl) {
+                if (alt) {
                     // create selection box
                     editor->state = StateSelectionBox;
                     for (unsigned i = 0; i < 2; ++i) {
@@ -452,9 +511,8 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             if (angle > 0.0f) {
                                 // reverse winding
 
-                                for (unsigned i = 0, j = editor->new_sector.num_walls - 1; i < editor->new_sector.num_walls; ++i) {
-                                    editor->new_sector.walls[i].end = j;
-                                    j                               = i;
+                                for (unsigned i = 0; i < editor->new_sector.num_walls; ++i) {
+                                    swap(unsigned, editor->new_sector.walls[i].prev, editor->new_sector.walls[i].end);
                                 }
                             }
                         }
@@ -685,8 +743,11 @@ int editor2dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
     }
     lw_drawString(framebuffer, (lw_ivec2){ 5, 5 }, editor->c_font, editor->font, editor->text_buffer);
 
-    snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "Selected: %u", editor->selected_points_len);
+    snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "Sectors: %zu", editor->world.sectors.num_nodes);
     lw_drawString(framebuffer, (lw_ivec2){ 5, 5 + editor->font.texture.height * 1 }, editor->c_font, editor->font, editor->text_buffer);
+
+    snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "Selected: %u", editor->selected_points_len);
+    lw_drawString(framebuffer, (lw_ivec2){ 5, 5 + editor->font.texture.height * 2 }, editor->c_font, editor->font, editor->text_buffer);
 
     {
         int rot_val = editor->cam_rot == 3 ? -90 : editor->cam_rot * 90.0f;

@@ -398,6 +398,8 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             // move
                             editor->state              = StateMovePoints;
                             editor->select_point_index = i;
+                            editor->move_origin[0]     = editor->selected_points[editor->select_point_index]->start[0];
+                            editor->move_origin[1]     = editor->selected_points[editor->select_point_index]->start[1];
                         }
                         finish_loop = true;
                         break;
@@ -444,12 +446,29 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                     // move point if selected
                     editor->select_point_index = 0;
                     editor->state              = StateMovePoints;
+                    editor->move_origin[0]     = editor->selected_points[editor->select_point_index]->start[0];
+                    editor->move_origin[1]     = editor->selected_points[editor->select_point_index]->start[1];
                 }
             }
             break;
             /////////////////////////////////////////////////////////////
         case StateMovePoints:
-            if (lw_isMouseButtonUp(context, 0)) {
+            if (lw_isKeyDown(context, LW_KeyEscape)) {
+                // cancel
+                lw_vec2 delta;
+                delta[0] = editor->move_origin[0] - editor->selected_points[editor->select_point_index]->start[0];
+                delta[1] = editor->move_origin[1] - editor->selected_points[editor->select_point_index]->start[1];
+
+                for (unsigned i = 0; i < editor->selected_points_len; ++i) {
+                    LW_LineDef *const line = editor->selected_points[i];
+                    line->start[0] += delta[0];
+                    line->start[1] += delta[1];
+                }
+
+                editor->state = StateIdle;
+                break;
+
+            } else if (lw_isMouseButtonUp(context, 0)) {
                 for (unsigned i = 0; i < editor->selected_points_len; ++i) {
                     // If moving portal, check if portal should be disconnected
                     // recalc line plane
@@ -496,7 +515,10 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
             break;
             ///////////////////////////////////////////////
         case StateSelectionBox:
-            if (lw_isMouseButtonUp(context, 0)) {
+            if (lw_isKeyDown(context, LW_KeyEscape)) {
+                // cancel
+                editor->state = StateIdle;
+            } else if (lw_isMouseButtonUp(context, 0)) {
                 // do selection
                 lw_vec4 a               = { 0.0f, 0.0f, 0.0f, 1.0f }, b;
                 LW_SectorListNode *node = editor->world.sectors.head;
@@ -549,7 +571,11 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
             break;
             ///////////////////////////////////////////////
         case StateCreateSector:
-            if (lw_isKeyDown(context, LW_KeySpace)) {
+            if (lw_isKeyDown(context, LW_KeyEscape)) {
+                // cancel
+                editor->state = StateIdle;
+
+            } else if (lw_isKeyDown(context, LW_KeySpace)) {
                 LW_Circle circle;
                 lw_vec4 a = { 0.0f, 0.0f, 0.0f, 1.0f }, b;
 
@@ -609,7 +635,6 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             // calculate wall planes
                             lw_recalcLinePlane(&sector->walls[i]);
                         }
-
 
                         editor->state = StateIdle;
                     } else {

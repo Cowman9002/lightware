@@ -63,6 +63,9 @@ typedef struct Editor {
     // state machine
     State state;
 
+    // move points
+    lw_vec2 move_origin;
+
     // create sector state
     LW_Sector new_sector;
     unsigned new_sector_capacity;

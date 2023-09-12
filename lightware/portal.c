@@ -387,8 +387,8 @@ void lw_recalcLinePlane(LW_LineDef *const linedef) {
 
     p0[0] = linedef->start[0];
     p0[1] = linedef->start[1];
-    p1[0] = sector->walls[linedef->end].start[0];
-    p1[1] = sector->walls[linedef->end].start[1];
+    p1[0] = sector->walls[linedef->next].start[0];
+    p1[1] = sector->walls[linedef->next].start[1];
 
     lw_vec2 normal;
     normal[0] = -(p1[1] - p0[1]);
@@ -431,8 +431,8 @@ bool lw_pointInSector(LW_Sector sector, lw_vec2 point) {
     for (unsigned i = 0; i < sector.num_walls; ++i) {
         line[0][0] = sector.walls[i].start[0];
         line[0][1] = sector.walls[i].start[1];
-        line[1][0] = sector.walls[sector.walls[i].end].start[0];
-        line[1][1] = sector.walls[sector.walls[i].end].start[1];
+        line[1][0] = sector.walls[sector.walls[i].next].start[0];
+        line[1][1] = sector.walls[sector.walls[i].next].start[1];
 
         if (lw_intersectSegmentRay(line, ray, &t)) {
             // If hitting a vertex exactly, only count if other vertex is above the ray
@@ -534,8 +534,8 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
 
             p0[0] = linedef.start[0];
             p0[1] = linedef.start[1];
-            p1[0] = sector->walls[linedef.end].start[0];
-            p1[1] = sector->walls[linedef.end].start[1];
+            p1[0] = sector->walls[linedef.next].start[0];
+            p1[1] = sector->walls[linedef.next].start[1];
 
             // back face culling
             float back_face_test = lw_dot3d(linedef.plane, cam.pos);
@@ -687,74 +687,87 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
             }
         }
 
-        // render floor
-        if (cam.pos[2] > def.floor_height) {
-            // init clipping list
-            for (unsigned i = 0; i < sector->num_walls; ++i) {
-                clipping_list0[i][0] = sector->walls[i].start[0], clipping_list0[i][1] = sector->walls[i].start[1], clipping_list0[i][2] = def.floor_height;
-            }
+        // // render floor
+        // if (cam.pos[2] > def.floor_height) {
+        //     // init clipping list
+        //     for (unsigned i = 0; i < sector->num_walls; ++i) {
+        //         LW_LineDef l                 = sector->walls[i];
+        //         clipping_list0[i * 2][0] = l.start[0];
+        //         clipping_list0[i * 2][1] = l.start[1];
+        //         clipping_list0[i * 2][2] = def.floor_height;
 
-            unsigned clipped_len = sector->num_walls;
+        //         clipping_list0[i * 2 + 1][0] = sector->walls[l.next].start[0];
+        //         clipping_list0[i * 2 + 1][1] = sector->walls[l.next].start[1];
+        //         clipping_list0[i * 2 + 1][2] = def.floor_height;
+        //     }
 
-            // clip
-            lw_vec3 *clipped_poly = _clipPolygon(frustum, false, clipping_list0, clipping_list1, &clipped_len);
+        //     unsigned clipped_len = sector->num_walls * 2;
 
-            // transform to screen coords
-            for (unsigned i = 0; i < clipped_len; ++i) {
-                lw_vec4 a = { clipped_poly[i][0], clipped_poly[i][1], clipped_poly[i][2], 1.0f };
-                lw_mat4MulVec4(cam.vp_mat, a, transformed_points[i]);
+        //     // clip
+        //     lw_vec3 *clipped_poly = _clipPolygon(frustum, false, clipping_list0, clipping_list1, &clipped_len);
 
-                float inv_w;
-                if (transformed_points[i][3] > 0.0f) {
-                    inv_w = 1.0f / transformed_points[i][3];
-                } else {
-                    inv_w = 0.0f;
-                }
+        //     // transform to screen coords
+        //     for (unsigned i = 0; i < clipped_len; ++i) {
+        //         lw_vec4 a = { clipped_poly[i][0], clipped_poly[i][1], clipped_poly[i][2], 1.0f };
+        //         lw_mat4MulVec4(cam.vp_mat, a, transformed_points[i]);
 
-                ndc_points[i][0]    = transformed_points[i][0] * inv_w;
-                ndc_points[i][1]    = transformed_points[i][2] * inv_w;
-                screen_points[i][0] = (ndc_points[i][0] * 0.5 + 0.5) * (framebuffer->width - 1);
-                screen_points[i][1] = (-ndc_points[i][1] * 0.5 + 0.5) * (framebuffer->height - 1);
-            }
+        //         float inv_w;
+        //         if (transformed_points[i][3] > 0.0f) {
+        //             inv_w = 1.0f / transformed_points[i][3];
+        //         } else {
+        //             inv_w = 0.0f;
+        //         }
 
-            // render
-            lw_drawPoly(framebuffer, screen_points, clipped_len, LW_COLOR_RED);
-        }
+        //         ndc_points[i][0]    = transformed_points[i][0] * inv_w;
+        //         ndc_points[i][1]    = transformed_points[i][2] * inv_w;
+        //         screen_points[i][0] = (ndc_points[i][0] * 0.5 + 0.5) * (framebuffer->width - 1);
+        //         screen_points[i][1] = (-ndc_points[i][1] * 0.5 + 0.5) * (framebuffer->height - 1);
+        //     }
 
-        // render ceiling
-        if (cam.pos[2] < def.ceiling_height) {
-            // init clipping list
-            for (unsigned i = 0; i < sector->num_walls; ++i) {
-                unsigned j           = sector->num_walls - i - 1;
-                clipping_list0[j][0] = sector->walls[i].start[0], clipping_list0[j][1] = sector->walls[i].start[1], clipping_list0[j][2] = def.ceiling_height;
-            }
+        //     // render
+        //     lw_drawPoly(framebuffer, screen_points, clipped_len, LW_COLOR_RED);
+        // }
 
-            unsigned clipped_len = sector->num_walls;
+        // // render ceiling
+        // if (cam.pos[2] < def.ceiling_height) {
+        //     // init clipping list
+        //     for (unsigned i = 0; i < sector->num_walls; ++i) {
+        //         LW_LineDef l                 = sector->walls[i];
+        //         clipping_list0[i * 2][0] = l.start[0];
+        //         clipping_list0[i * 2][1] = l.start[1];
+        //         clipping_list0[i * 2][2] = def.ceiling_height;
 
-            // clip
-            lw_vec3 *clipped_poly = _clipPolygon(frustum, false, clipping_list0, clipping_list1, &clipped_len);
+        //         clipping_list0[i * 2 + 1][0] = sector->walls[l.next].start[0];
+        //         clipping_list0[i * 2 + 1][1] = sector->walls[l.next].start[1];
+        //         clipping_list0[i * 2 + 1][2] = def.ceiling_height;
+        //     }
 
-            // transform to screen coords
-            for (unsigned i = 0; i < clipped_len; ++i) {
-                lw_vec4 a = { clipped_poly[i][0], clipped_poly[i][1], clipped_poly[i][2], 1.0f };
-                lw_mat4MulVec4(cam.vp_mat, a, transformed_points[i]);
+        //     unsigned clipped_len = sector->num_walls * 2;
 
-                float inv_w;
-                if (transformed_points[i][3] > 0.0f) {
-                    inv_w = 1.0f / transformed_points[i][3];
-                } else {
-                    inv_w = 0.0f;
-                }
+        //     // clip
+        //     lw_vec3 *clipped_poly = _clipPolygon(frustum, false, clipping_list0, clipping_list1, &clipped_len);
 
-                ndc_points[i][0]    = transformed_points[i][0] * inv_w;
-                ndc_points[i][1]    = transformed_points[i][2] * inv_w;
-                screen_points[i][0] = (ndc_points[i][0] * 0.5 + 0.5) * (framebuffer->width - 1);
-                screen_points[i][1] = (-ndc_points[i][1] * 0.5 + 0.5) * (framebuffer->height - 1);
-            }
+        //     // transform to screen coords
+        //     for (unsigned i = 0; i < clipped_len; ++i) {
+        //         lw_vec4 a = { clipped_poly[i][0], clipped_poly[i][1], clipped_poly[i][2], 1.0f };
+        //         lw_mat4MulVec4(cam.vp_mat, a, transformed_points[i]);
 
-            // render
-            lw_drawPoly(framebuffer, screen_points, clipped_len, LW_COLOR_YELLOW);
-        }
+        //         float inv_w;
+        //         if (transformed_points[i][3] > 0.0f) {
+        //             inv_w = 1.0f / transformed_points[i][3];
+        //         } else {
+        //             inv_w = 0.0f;
+        //         }
+
+        //         ndc_points[i][0]    = transformed_points[i][0] * inv_w;
+        //         ndc_points[i][1]    = transformed_points[i][2] * inv_w;
+        //         screen_points[i][0] = (ndc_points[i][0] * 0.5 + 0.5) * (framebuffer->width - 1);
+        //         screen_points[i][1] = (-ndc_points[i][1] * 0.5 + 0.5) * (framebuffer->height - 1);
+        //     }
+
+        //     // render
+        //     lw_drawPoly(framebuffer, screen_points, clipped_len, LW_COLOR_YELLOW);
+        // }
 
         free(frustum.planes);
     }

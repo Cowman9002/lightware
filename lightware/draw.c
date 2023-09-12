@@ -152,6 +152,97 @@ void lw_drawRect(LW_Framebuffer *const framebuffer, LW_Recti rect, LW_Color colo
     }
 }
 
+// http://fredericgoset.ovh/mathematiques/courbes/en/filled_circle.html
+void lw_fillCircle(LW_Framebuffer *const framebuffer, LW_Circlei circle, LW_Color color) {
+    if(circle.pos[0] + circle.radius < 0) return;
+    if(circle.pos[0] - circle.radius >= (int)framebuffer->width) return;
+    if(circle.pos[1] + circle.radius < 0) return;
+    if(circle.pos[1] - circle.radius >= (int)framebuffer->height) return;
+
+    int x = 0;
+    int y = circle.radius;
+    int m = 5 - 4 * circle.radius;
+
+    while (x <= y) {
+        int start_x_raw = circle.pos[0] - y;
+        int end_x_raw   = circle.pos[0] + y;
+        int start_y_raw = circle.pos[1] - x;
+        int end_y_raw   = circle.pos[1] + x;
+
+        int start_x = clamp(start_x_raw, 0, framebuffer->width - 1);
+        int end_x   = clamp(end_x_raw, 0, framebuffer->width - 1);
+        int start_y = clamp(start_y_raw, 0, framebuffer->height - 1);
+        int end_y   = clamp(end_y_raw, 0, framebuffer->height - 1);
+
+        if (start_x <= end_x_raw && end_x >= start_x_raw && start_y <= end_y_raw && end_y >= start_y_raw) {
+            int pos1 = (start_x) + (start_y)*framebuffer->width;
+            int pos2 = (start_x) + (end_y)*framebuffer->width;
+
+            for (int xx = start_x; xx <= end_x; xx++) {
+                framebuffer->pixels[pos1++] = color;
+                framebuffer->pixels[pos2++] = color;
+            }
+        }
+
+        if (m > 0) {
+            int start_x_raw = circle.pos[0] - x;
+            int end_x_raw   = circle.pos[0] + x;
+            int start_y_raw = circle.pos[1] - y;
+            int end_y_raw   = circle.pos[1] + y;
+
+            int start_x = clamp(start_x_raw, 0, framebuffer->width - 1);
+            int end_x   = clamp(end_x_raw, 0, framebuffer->width - 1);
+            int start_y = clamp(start_y_raw, 0, framebuffer->height - 1);
+            int end_y   = clamp(end_y_raw, 0, framebuffer->height - 1);
+
+            if (start_x <= end_x_raw && end_x >= start_x_raw && start_y <= end_y_raw && end_y >= start_y_raw) {
+                int pos1 = (start_x) + (start_y)*framebuffer->width;
+                int pos2 = (start_x) + (end_y)*framebuffer->width;
+
+                for (int xx = start_x; xx <= end_x; xx++) {
+                    framebuffer->pixels[pos1++] = color;
+                    framebuffer->pixels[pos2++] = color;
+                }
+            }
+
+            y--;
+            m -= 8 * y;
+        }
+
+        x++;
+        m += 8 * x + 4;
+    }
+}
+
+// https://www.geeksforgeeks.org/bresenhams-circle-drawing-algorithm/#
+// http://fredericgoset.ovh/mathematiques/courbes/en/bresenham_circle.html
+void _setCirclePixel(LW_Framebuffer *const framebuffer, lw_ivec2 pos, lw_ivec2 offset, LW_Color color) {
+    lw_setPixel(framebuffer, (lw_uvec2){ pos[0] + offset[0], pos[1] + offset[1] }, color);
+    lw_setPixel(framebuffer, (lw_uvec2){ pos[0] - offset[0], pos[1] + offset[1] }, color);
+    lw_setPixel(framebuffer, (lw_uvec2){ pos[0] + offset[0], pos[1] - offset[1] }, color);
+    lw_setPixel(framebuffer, (lw_uvec2){ pos[0] - offset[0], pos[1] - offset[1] }, color);
+    lw_setPixel(framebuffer, (lw_uvec2){ pos[0] + offset[1], pos[1] + offset[0] }, color);
+    lw_setPixel(framebuffer, (lw_uvec2){ pos[0] - offset[1], pos[1] + offset[0] }, color);
+    lw_setPixel(framebuffer, (lw_uvec2){ pos[0] + offset[1], pos[1] - offset[0] }, color);
+    lw_setPixel(framebuffer, (lw_uvec2){ pos[0] - offset[1], pos[1] - offset[0] }, color);
+}
+
+void lw_drawCircle(LW_Framebuffer *const framebuffer, LW_Circlei circle, LW_Color color) {
+    int m           = 5 - 4 * circle.radius;
+    lw_ivec2 offset = { 0, circle.radius };
+    _setCirclePixel(framebuffer, circle.pos, offset, color);
+    while (offset[1] >= offset[0]) {
+        _setCirclePixel(framebuffer, circle.pos, offset, color);
+
+        if (m > 0) {
+            --offset[1];
+            m -= 8 * offset[1];
+        }
+        ++offset[0];
+        m += 8 * offset[0] + 4;
+    }
+}
+
 // https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
 void _plotLineHigh(LW_Framebuffer *const framebuffer, lw_ivec2 v0, lw_ivec2 v1, LW_Color color);
 void _plotLineLow(LW_Framebuffer *const framebuffer, lw_ivec2 v0, lw_ivec2 v1, LW_Color color);

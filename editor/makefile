@@ -9,7 +9,7 @@ DEFINES := -DVERSION_MAJOR=0 -DVERSION_MINOR=1
 default: $(TARGET)
 all: default
 
-SOURCES = editor.c
+SOURCES = main.c editor2d.c editor3d.c
 OBJECTS = $(patsubst %.c, obj/%.o, $(SOURCES))
 HEADERS = $(wildcard *.h)
 

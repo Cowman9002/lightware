@@ -75,7 +75,43 @@ function Invoke-Run {
     }
 }
 
+function Invoke-Clean {
+    switch ($item) {
+        "dll" {  
+            Set-Location "lightware"
+            &"make" clean
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "clean '$item' failed with $LASTEXITCODE" -ForegroundColor Red
+                Set-Location "../"
+                return $false
+            }
+            
+            Set-Location "../"
+            Write-Host "Finished clean '$item'" -ForegroundColor Green
+            return $true
+        }
+        "editor" {  
+            Set-Location "editor"
+            &"make" clean
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "clean '$item' failed with $LASTEXITCODE" -ForegroundColor Red
+                Set-Location "../"
+                return $false
+            } 
+
+            Set-Location "../"
+            Write-Host "Finished clean '$item'" -ForegroundColor Green
+            return $true
+        }
+        Default {
+            Write-Host "Unknown item '$item' for clean" -ForegroundColor Red
+            return $false
+        }
+    }
+}
+
 switch ($command) {
+    "clean" { Invoke-Clean }
     "make" { Invoke-Make }
     "run" { 
         $res = Invoke-Make

@@ -26,14 +26,14 @@ typedef struct LIST_TAG {
     size_t num_nodes;
 } LIST_TAG;
 
-void LIST_METHOD(init)(LIST_TAG *const list);
-void LIST_METHOD(free)(LIST_TAG list);
-void LIST_METHOD(push_front)(LIST_TAG *const list, LIST_ITEM_TYPE item);
-void LIST_METHOD(push_back)(LIST_TAG *const list, LIST_ITEM_TYPE item);
-bool LIST_METHOD(insert)(LIST_TAG *const list, size_t location, LIST_ITEM_TYPE item);
-bool LIST_METHOD(pop_front)(LIST_TAG *const list, LIST_ITEM_TYPE *o_item);
-bool LIST_METHOD(pop_back)(LIST_TAG *const list, LIST_ITEM_TYPE *o_item);
-bool LIST_METHOD(remove)(LIST_TAG *const list, size_t location, LIST_ITEM_TYPE *o_item);
+LIGHTWARE_API void LIST_METHOD(init)(LIST_TAG *const list);
+LIGHTWARE_API void LIST_METHOD(free)(LIST_TAG list);
+LIGHTWARE_API void LIST_METHOD(push_front)(LIST_TAG *const list, LIST_ITEM_TYPE item);
+LIGHTWARE_API void LIST_METHOD(push_back)(LIST_TAG *const list, LIST_ITEM_TYPE item);
+LIGHTWARE_API bool LIST_METHOD(insert)(LIST_TAG *const list, size_t location, LIST_ITEM_TYPE item);
+LIGHTWARE_API bool LIST_METHOD(pop_front)(LIST_TAG *const list, LIST_ITEM_TYPE *o_item);
+LIGHTWARE_API bool LIST_METHOD(pop_back)(LIST_TAG *const list, LIST_ITEM_TYPE *o_item);
+LIGHTWARE_API bool LIST_METHOD(remove)(LIST_TAG *const list, size_t location, LIST_ITEM_TYPE *o_item);
 
 #undef LIST_TAG
 #undef LIST_ITEM_TYPE

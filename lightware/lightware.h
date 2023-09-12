@@ -59,6 +59,8 @@ LIGHTWARE_API float lw_dist2d(lw_vec2 a, lw_vec2 b);
 LIGHTWARE_API float lw_normalized2d(lw_vec2 a, lw_vec2 o);
 LIGHTWARE_API float lw_normalize2d(lw_vec2 a);
 LIGHTWARE_API void lw_rot2d(lw_vec2 a, float r, lw_vec2 o);
+LIGHTWARE_API float lw_angle2d(lw_vec2 a);
+LIGHTWARE_API float lw_angleBetween2d(lw_vec2 a, lw_vec2 b);
 
 LIGHTWARE_API float lw_dot3d(lw_vec3 a, lw_vec3 b);
 LIGHTWARE_API void lw_cross3d(lw_vec3 a, lw_vec3 b, lw_vec3 o);
@@ -82,6 +84,8 @@ LIGHTWARE_API void lw_mat4MulVec4(lw_mat4 a, lw_vec4 b, lw_vec4 out);
 
 typedef struct LW_Context LW_Context;
 typedef struct LW_Framebuffer LW_Framebuffer;
+
+#define LW_EXIT_OK 0
 
 typedef int (*LW_UpdateFn)(LW_Context *const context, float delta);
 typedef int (*LW_RenderFn)(LW_Context *const context, LW_Framebuffer *const main_frame_buffer);
@@ -316,6 +320,16 @@ typedef struct LW_Recti {
     lw_ivec2 pos, size;
 } LW_Recti;
 
+typedef struct LW_Circle {
+    lw_vec2 pos;
+    float radius;
+} LW_Circle;
+
+typedef struct LW_Circlei {
+    lw_ivec2 pos;
+    int radius;
+} LW_Circlei;
+
 /// @brief Returns true if point is inside of polygon. Polygon can be concave and have holes, but should be closed for predictable results.
 /// @param vertices array of points stored {line_start0, line_end0, line_start1, line_end1, ...}
 /// @param num_verts number of vertices in the vertices array
@@ -393,8 +407,13 @@ LIGHTWARE_API void lw_getFramebufferDimentions(LW_Framebuffer *const frame_buffe
 
 LIGHTWARE_API void lw_setPixel(LW_Framebuffer *const framebuffer, lw_uvec2 pos, LW_Color color);
 LIGHTWARE_API void lw_fillBuffer(LW_Framebuffer *const framebuffer, LW_Color color);
+
 LIGHTWARE_API void lw_fillRect(LW_Framebuffer *const framebuffer, LW_Recti rect, LW_Color color);
 LIGHTWARE_API void lw_drawRect(LW_Framebuffer *const framebuffer, LW_Recti rect, LW_Color color);
+
+LIGHTWARE_API void lw_fillCircle(LW_Framebuffer *const framebuffer, LW_Circlei circle, LW_Color color);
+LIGHTWARE_API void lw_drawCircle(LW_Framebuffer *const framebuffer, LW_Circlei circle, LW_Color color);
+
 LIGHTWARE_API void lw_drawLine(LW_Framebuffer *const framebuffer, lw_ivec2 v0, lw_ivec2 v1, LW_Color color);
 LIGHTWARE_API void lw_drawPoly(LW_Framebuffer *const framebuffer, lw_ivec2 *vertices, unsigned num_vertices, LW_Color color);
 
@@ -408,9 +427,14 @@ typedef struct LW_Subsector {
     float floor_height, ceiling_height;
 } LW_Subsector;
 
+typedef struct LW_LineDef {
+    lw_vec2 start; // position
+    unsigned end;  // index to other linedef
+} LW_LineDef;
+
 typedef struct LW_Sector {
     unsigned num_walls;
-    lw_vec2 *points;                 // list
+    LW_LineDef *walls;               // list
     lw_vec4 *planes;                 // list
     struct LW_Sector **next_sectors; // list
 
@@ -453,9 +477,11 @@ typedef struct LW_Camera {
 /// @param cam
 /// @return
 LIGHTWARE_API void lw_calcCameraFrustum(LW_Camera *const cam);
+LIGHTWARE_API void lw_calcCameraProjection(LW_Camera *const cam);
 LIGHTWARE_API LW_Frustum lw_calcFrustumFromPoly(lw_vec3 *polygon, unsigned num_verts, lw_vec3 view_point);
 
 LIGHTWARE_API bool lw_loadPortalWorld(const char *path, float scale, LW_PortalWorld *o_pod);
+LIGHTWARE_API void lw_recalcSectorPlane(LW_Sector *sector, unsigned i);
 
 LIGHTWARE_API void lw_freeSubsector(LW_Subsector subsector);
 LIGHTWARE_API void lw_freeSector(LW_Sector sector);
@@ -465,7 +491,7 @@ LIGHTWARE_API bool lw_pointInSector(LW_Sector sector, lw_vec2 point);
 LIGHTWARE_API LW_Sector *lw_getSector(LW_PortalWorld pod, lw_vec2 point);
 LIGHTWARE_API unsigned lw_getSubSector(LW_Sector *sector, lw_vec3 point);
 
-LIGHTWARE_API void lw_renderPortalWorld(LW_PortalWorld pod, LW_Camera camera);
+LIGHTWARE_API void lw_renderPortalWorld(LW_Framebuffer *const framebuffer, LW_PortalWorld pod, LW_Camera camera);
 
 
 //
@@ -477,3 +503,4 @@ typedef struct LW_Aabb {
 } LW_Aabb;
 
 LIGHTWARE_API bool lw_pointInAabb(LW_Aabb aabb, lw_vec2 point);
+LIGHTWARE_API bool lw_pointInCircle(LW_Circle circle, lw_vec2 point);

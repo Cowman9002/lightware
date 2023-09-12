@@ -44,6 +44,15 @@ void lw_rot2d(lw_vec2 a, float r, lw_vec2 o) {
     o[1] = -s * a[0] + c * a[1];
 }
 
+float lw_angle2d(lw_vec2 a) {
+    return atan2(a[1], a[0]);
+}
+
+// https://wumbo.net/formulas/angle-between-two-vectors-2d/
+float lw_angleBetween2d(lw_vec2 a, lw_vec2 b) {
+    return atan2(a[1] * b[0] - a[0] * b[1], a[0] * b[0] - a[1] * b[1]);
+}
+
 //////////////////////////////////////////////////////////////
 
 float lw_dot3d(lw_vec3 a, lw_vec3 b) {

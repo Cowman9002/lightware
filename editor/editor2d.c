@@ -114,13 +114,13 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                 editor->new_sector.sub_sectors[0].ceiling_height = 3.0f;
                 editor->new_sector.sub_sectors[0].floor_height   = 0.0f;
 
-                editor->new_sector.walls               = malloc(editor->new_sector_capacity * sizeof(*editor->new_sector.walls));
-                editor->new_sector.walls[0].start[0]   = editor->mouse_snapped_pos[0];
-                editor->new_sector.walls[0].start[1]   = editor->mouse_snapped_pos[1];
-                editor->new_sector.walls[0].next        = UNDEFINED;
-                editor->new_sector.walls[0].prev       = UNDEFINED;
-                editor->new_sector.walls[0].portal_sector       = NULL;
-                editor->new_sector.walls[0].portal_wall = NULL;
+                editor->new_sector.walls                  = malloc(editor->new_sector_capacity * sizeof(*editor->new_sector.walls));
+                editor->new_sector.walls[0].start[0]      = editor->mouse_snapped_pos[0];
+                editor->new_sector.walls[0].start[1]      = editor->mouse_snapped_pos[1];
+                editor->new_sector.walls[0].next          = UNDEFINED;
+                editor->new_sector.walls[0].prev          = UNDEFINED;
+                editor->new_sector.walls[0].portal_sector = NULL;
+                editor->new_sector.walls[0].portal_wall   = NULL;
 
                 editor->new_sector.num_walls = 1;
 
@@ -137,7 +137,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                         // remove all selected points from that sector
                         unsigned n = editor->selected_points_len;
                         for (unsigned j = i + 1; j < n; ++j) {
-                            if(sector->num_walls == 0) break;
+                            if (sector->num_walls == 0) break;
                             LW_LineDef *jline = editor->selected_points[j];
                             if (jline->sector == sector) {
                                 // swap remove
@@ -154,7 +154,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                     // fill in missing wall
                     LW_LineDef *prev = &sector->walls[line->prev];
-                    LW_LineDef *next  = &sector->walls[line->next];
+                    LW_LineDef *next = &sector->walls[line->next];
                     unsigned index   = prev->next;
 
                     prev->next = line->next;
@@ -162,18 +162,18 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                     lw_recalcLinePlane(prev);
 
                     // remove portal if needed
-                    if(line->portal_sector != NULL) {
-                        line->portal_wall->portal_wall = NULL;
+                    if (line->portal_sector != NULL) {
+                        line->portal_wall->portal_wall   = NULL;
                         line->portal_wall->portal_sector = NULL;
-                        line->portal_wall = NULL;
-                        line->portal_sector = NULL;
+                        line->portal_wall                = NULL;
+                        line->portal_sector              = NULL;
                     }
-                    
-                    if(prev->portal_sector != NULL) {
-                        prev->portal_wall->portal_wall = NULL;
+
+                    if (prev->portal_sector != NULL) {
+                        prev->portal_wall->portal_wall   = NULL;
                         prev->portal_wall->portal_sector = NULL;
-                        prev->portal_wall = NULL;
-                        prev->portal_sector = NULL;
+                        prev->portal_wall                = NULL;
+                        prev->portal_sector              = NULL;
                     }
 
                     // swap remove
@@ -188,7 +188,75 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                 editor->selected_points_len = 0;
 
             } else if (lw_isKeyDown(context, LW_KeyC)) {
-                // TODO: Insert point in line
+                // Insert point in line
+                
+                // if specter select on:
+                // for every line in range, add point at mouse pos
+                // if not specter select:
+                // add point at mouse pos for first line
+
+                lw_vec4 a = { 0.0f, 0.0f, 0.0f, 1.0f }, b = { 0.0f, 0.0f, 0.0f, 1.0f }, c, d;
+                lw_vec2 seg[2];
+                lw_vec4 closest_point = {0.0f, 0.0f, 0.0f, 1.0f};
+                lw_vec2 difference;
+
+                LW_SectorListNode *node = editor->world.sectors.head;
+                for (; node != NULL; node = node->next) {
+                    LW_Sector *sec = &node->item;
+                    for (unsigned i = 0; i < sec->num_walls; ++i) {
+                        LW_LineDef *const line = &sec->walls[i];
+
+                        a[0] = line->start[0], a[1] = line->start[1];
+                        b[0] = sec->walls[line->next].start[0], b[1] = sec->walls[line->next].start[1];
+
+                        lw_mat4MulVec4(editor->to_screen_mat, a, c);
+                        lw_mat4MulVec4(editor->to_screen_mat, b, d);
+
+                        seg[0][0] = c[0], seg[0][1] = c[1];
+                        seg[1][0] = d[0], seg[1][1] = d[1];
+
+                        lw_closestPointOnSegment(seg, mouse_screen_posv4, closest_point);
+                        difference[0] = closest_point[0] - mouse_screen_posv4[0];
+                        difference[1] = closest_point[1] - mouse_screen_posv4[1];
+
+                        float sqdst = lw_dot2d(difference, difference);
+
+                        if (sqdst < LINE_SELECTION_RADIUS * LINE_SELECTION_RADIUS) {
+                            // remove portal
+                            if (line->portal_sector != NULL) {
+                                line->portal_wall->portal_sector = NULL;
+                                line->portal_wall->portal_wall   = NULL;
+                                line->portal_sector              = NULL;
+                                line->portal_wall                = NULL;
+                            }
+
+                            // new point in world space
+                            lw_mat4MulVec4(editor->to_world_mat, closest_point, c);
+
+                            // add new point
+                            ++sec->num_walls;
+                            sec->walls                 = realloc(sec->walls, sec->num_walls * sizeof(*sec->walls));
+                            LW_LineDef *const new_line = &sec->walls[sec->num_walls - 1];
+
+                            // initialize new point
+                            new_line->start[0] = c[0], new_line->start[1] = c[1];
+                            memcpy(new_line->plane, line->plane, sizeof(new_line->plane)); // point added on line means point added on plane
+                            new_line->portal_sector = NULL;
+                            new_line->portal_wall = NULL;
+                            new_line->sector = sec;
+
+                            // insert into polygon
+                            new_line->next = line->next;
+                            new_line->prev = i;
+                            sec->walls[line->next].prev = sec->num_walls - 1;
+                            line->next = sec->num_walls - 1;
+
+                            if (!editor->specter_select) goto _end_sector_loop;
+                            break;
+                        }
+                    }
+                }
+                _end_sector_loop:
 
             } else if (lw_isKeyDown(context, LW_KeyK)) {
                 // TODO: Knife tool
@@ -276,11 +344,11 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                 if (sqdst > AUTO_PORTAL_EPSILON) continue;
 
                                 // do the portal stuff
-                                closest->portal_sector       = sec;
-                                closest->portal_wall = line;
+                                closest->portal_sector = sec;
+                                closest->portal_wall   = line;
 
-                                line->portal_sector       = closest_sector;
-                                line->portal_wall = closest;
+                                line->portal_sector = closest_sector;
+                                line->portal_wall   = closest;
 
                                 goto _end_outer;
                             }
@@ -288,10 +356,10 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                     _end_outer:
                     } else {
                         // remove portal
-                        closest->portal_wall->portal_sector       = NULL;
-                        closest->portal_wall->portal_wall = NULL;
-                        closest->portal_sector                   = NULL;
-                        closest->portal_wall             = NULL;
+                        closest->portal_wall->portal_sector = NULL;
+                        closest->portal_wall->portal_wall   = NULL;
+                        closest->portal_sector              = NULL;
+                        closest->portal_wall                = NULL;
                     }
                 }
 
@@ -491,7 +559,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                         // finish sector
 
                         editor->new_sector.walls[editor->new_sector.num_walls - 1].next = 0;
-                        editor->new_sector.walls[0].prev                               = editor->new_sector.num_walls - 1;
+                        editor->new_sector.walls[0].prev                                = editor->new_sector.num_walls - 1;
 
                         {
                             // ensure points are counter-clockwise
@@ -550,12 +618,12 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                         editor->new_sector.walls    = realloc(editor->new_sector.walls, editor->new_sector_capacity * sizeof(*editor->new_sector.walls));
                     }
 
-                    editor->new_sector.walls[editor->new_sector.num_walls].start[0] = editor->mouse_snapped_pos[0];
-                    editor->new_sector.walls[editor->new_sector.num_walls].start[1] = editor->mouse_snapped_pos[1];
-                    editor->new_sector.walls[editor->new_sector.num_walls].next      = UNDEFINED;
-                    editor->new_sector.walls[editor->new_sector.num_walls].portal_sector     = NULL;
+                    editor->new_sector.walls[editor->new_sector.num_walls].start[0]      = editor->mouse_snapped_pos[0];
+                    editor->new_sector.walls[editor->new_sector.num_walls].start[1]      = editor->mouse_snapped_pos[1];
+                    editor->new_sector.walls[editor->new_sector.num_walls].next          = UNDEFINED;
+                    editor->new_sector.walls[editor->new_sector.num_walls].portal_sector = NULL;
 
-                    editor->new_sector.walls[editor->new_sector.num_walls].prev    = editor->new_sector.num_walls - 1;
+                    editor->new_sector.walls[editor->new_sector.num_walls].prev     = editor->new_sector.num_walls - 1;
                     editor->new_sector.walls[editor->new_sector.num_walls - 1].next = editor->new_sector.num_walls;
 
                     ++editor->new_sector.num_walls;

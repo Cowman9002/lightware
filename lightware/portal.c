@@ -89,6 +89,38 @@ LW_Frustum lw_calcFrustumFromPoly(lw_vec3 *polygon, unsigned num_verts, lw_vec3 
     return frustum;
 }
 
+void lw_screenPointToRay(LW_Camera cam, int width, int height, lw_vec2 point, lw_vec3 o_pos, lw_vec3 o_dir) {
+    // https://gamedev.stackexchange.com/questions/194575/what-is-the-logic-behind-of-screenpointtoray
+
+    // Remap so (0, 0) is the center of the window,
+    // and the edges are at -0.5 and +0.5.
+    lw_vec2 relative;
+    relative[0] = point[0] / width - 0.5f;
+    relative[1] = -(point[1] / height - 0.5f);
+
+    // Angle in radians from the view axis
+    // to the top plane of the view pyramid.
+    float angle = 0.5f * cam.fov;
+
+    // World space height of the view pyramid
+    // measured at 1 m depth from the camera.
+    float world_height = 2.0f * tanf(angle);
+
+    // Convert relative position to world units.
+    lw_vec4 world_units;
+    world_units[0] = relative[0] * world_height * cam.aspect_ratio;
+    world_units[1] = 1.0f;
+    world_units[2] = relative[1] * world_height;
+    world_units[1] = 1.0f;
+
+    // Rotate to match camera orientation.
+    lw_vec4 direction;
+    lw_mat4MulVec4(cam.rot_mat, world_units, direction);
+
+    o_pos[0] = cam.pos[0], o_pos[1] = cam.pos[1], o_pos[2] = cam.pos[2];
+    o_dir[0] = direction[0], o_dir[1] = direction[1], o_dir[2] = direction[2];
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define LOAD_MIN_SUPPORTED_VERSION 1
@@ -420,7 +452,7 @@ void lw_freePortalWorld(LW_PortalWorld pod) {
 }
 
 bool lw_pointInSector(LW_Sector sector, lw_vec2 point) {
-    lw_vec2 ray[2] = { { point[0], point[1] }, { point[0] - 1.0f, point[1] } };
+    lw_vec2 ray[2] = { { point[0], point[1] }, { -1.0f, 0.0f } };
     lw_vec2 line[2];
     float t;
 
@@ -434,7 +466,7 @@ bool lw_pointInSector(LW_Sector sector, lw_vec2 point) {
         line[1][0] = sector.walls[sector.walls[i].next].start[0];
         line[1][1] = sector.walls[sector.walls[i].next].start[1];
 
-        if (lw_intersectSegmentRay(line, ray, &t)) {
+        if (lw_intersectSegmentRay(line, ray, &t, NULL)) {
             // If hitting a vertex exactly, only count if other vertex is above the ray
             if (t != 0.0f && t != 1.0f) {
                 ++num_intersections;

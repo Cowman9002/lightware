@@ -3,6 +3,8 @@
 
 #define UNDEFINED (~0)
 
+#define CAMERA_3D_HEIGHT 1.6f
+
 #define MIN_ZOOM 0.001
 #define MAX_ZOOM 1.0
 #define MAX_GRID (256.0f)
@@ -15,12 +17,19 @@
 
 #define AUTO_PORTAL_EPSILON 0.003
 
+typedef enum RayHitType {
+    RayHitType_None = 0,
+    RayHitType_Floor,
+    RayHitType_Ceiling,
+    RayHitType_Wall0,
+} RayHitType;
+
 typedef enum State {
     StateIdle = 0,
     StateCreateSector,
     StateMovePoints,
     StateSelectionBox,
-}State;
+} State;
 
 typedef struct Editor {
     char *text_buffer;
@@ -35,6 +44,12 @@ typedef struct Editor {
     // 3d mode
     bool view_3d;
     LW_Camera cam3d;
+
+    RayHitType ray_hit_type;
+    lw_vec3 intersect_point;
+    float intersect_dist;
+
+    // Selection
 
     LW_LineDef **selected_points;
     unsigned selected_points_len, selected_points_capacity;
@@ -74,7 +89,7 @@ typedef struct Editor {
     LW_Aabb selection_box;
     lw_vec2 selection_box_pivot;
 
-}Editor;
+} Editor;
 
 bool editorInit(Editor *const editor);
 int editorUpdate(Editor *const editor, float dt, LW_Context *const context);

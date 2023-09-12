@@ -42,11 +42,11 @@ bool editorInit(Editor *const editor) {
     editor->c_highlighted_vertices = RGB(240, 212, 30);
 
     editor->grid_active = true;
-    editor->grid_size   = 1.0f;
+    editor->grid_size   = 8.0f;
 
     editor->specter_select = true;
 
-    editor->zoom   = 0.03;
+    editor->zoom   = 0.08;
     editor->zoom_t = inv_logerp(MIN_ZOOM, MAX_ZOOM, editor->zoom);
 
     editor->cam3d.aspect_ratio = (float)editor->width / (float)editor->height;
@@ -106,7 +106,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
         editor->cam3d.sector = lw_getSector(editor->world, editor->cam3d.pos);
         if (editor->cam3d.sector != NULL) {
-            editor->cam3d.pos[2] = (editor->cam3d.sector->sub_sectors[0].floor_height + editor->cam3d.sector->sub_sectors[0].ceiling_height) * 0.5f;
+            editor->cam3d.pos[2] = editor->cam3d.sector->sub_sectors[0].floor_height + CAMERA_3D_HEIGHT;
         }
 
         return LW_EXIT_OK;
@@ -662,6 +662,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                     editor->new_sector.walls[editor->new_sector.num_walls].start[1]      = editor->mouse_snapped_pos[1];
                     editor->new_sector.walls[editor->new_sector.num_walls].next          = UNDEFINED;
                     editor->new_sector.walls[editor->new_sector.num_walls].portal_sector = NULL;
+                    editor->new_sector.walls[editor->new_sector.num_walls].portal_wall   = NULL;
 
                     editor->new_sector.walls[editor->new_sector.num_walls].prev     = editor->new_sector.num_walls - 1;
                     editor->new_sector.walls[editor->new_sector.num_walls - 1].next = editor->new_sector.num_walls;
@@ -682,6 +683,19 @@ int editor2dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
     lw_fillBuffer(framebuffer, editor->c_background);
 
     _drawGrid(editor, framebuffer, context);
+
+    {
+        // draw origin
+
+        lw_vec4 a = { 0.0f, 0.0f, 0.0f, 1.0f }, b;
+        lw_mat4MulVec4(editor->to_screen_mat, a, b);
+        LW_Color color = RGB(255 - editor->c_background.r, 255 - editor->c_background.g, 255 - editor->c_background.b);
+
+        for (int i = -5; i <= 5; ++i) {
+            lw_setPixel(framebuffer, (lw_uvec2){ b[0] + i, b[1] }, color);
+            lw_setPixel(framebuffer, (lw_uvec2){ b[0], b[1] + i }, color);
+        }
+    }
 
     {
         LW_Circlei circle;
@@ -876,7 +890,7 @@ int editor2dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
             snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "GRID: %*s1/%.0f", d < 10 ? 4 : 3, "", d);
         }
     } else {
-        snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "GRID: OFF");
+        snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "GRID:     OFF");
     }
     lw_drawString(framebuffer, (lw_ivec2){ editor->width - editor->font.char_width * strlen(editor->text_buffer) - 5, 5 + editor->font.texture.height * 2 },
                   editor->c_font, editor->font, editor->text_buffer);
@@ -909,6 +923,10 @@ static void _input(Editor *const editor, float dt, LW_Context *const context) {
 
     if (lw_isKeyDown(context, LW_KeyP)) {
         editor->specter_select = !editor->specter_select;
+    }
+    
+    if (lw_isKeyDown(context, LW_KeyO)) {
+        // TODO: Enable vertex snapping
     }
 
     if (lw_isKeyDown(context, LW_KeyE)) {

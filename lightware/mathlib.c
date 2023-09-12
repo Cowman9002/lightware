@@ -27,9 +27,11 @@ float lw_normalized2d(lw_vec2 a, lw_vec2 o) {
 }
 
 float lw_normalize2d(lw_vec2 a) {
-    float len = sqrtf(lw_dot2d(a, a));
+    float len = lw_dot2d(a, a);
     if (len != 0) {
+        len           = sqrtf(len);
         float inv_len = 1.0f / len;
+
         for (unsigned i = 0; i < 2; ++i)
             a[i] *= inv_len;
     }

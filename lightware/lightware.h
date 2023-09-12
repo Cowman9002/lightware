@@ -106,6 +106,7 @@ LIGHTWARE_API void lw_deinit(LW_Context *const context);
 LIGHTWARE_API int lw_start(LW_Context *const context);
 
 LIGHTWARE_API void *lw_getUserData(LW_Context *const context);
+LIGHTWARE_API float lw_getSeconds(LW_Context *const context);
 
 //
 //  INPUT
@@ -345,10 +346,12 @@ LIGHTWARE_API bool lw_pointInPoly(lw_vec2 *vertices, unsigned num_verts, lw_vec2
 LIGHTWARE_API bool lw_pointInConvexPoly(lw_vec2 *vertices, unsigned num_vertices, lw_vec2 point);
 
 LIGHTWARE_API bool lw_intersectSegmentPlane(lw_vec3 line[2], lw_vec4 plane, float *o_t);
+LIGHTWARE_API bool lw_intersectRayPlane(lw_vec3 ray[2], lw_vec4 plane, float *o_t);
 
 LIGHTWARE_API bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t);
 LIGHTWARE_API bool lw_intersectSegmentLine(lw_vec2 seg[2], lw_vec2 line[2], float *o_t);
-LIGHTWARE_API bool lw_intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float *o_t);
+// ray is defined as origin direction, but direction doesn't need to be normalized
+LIGHTWARE_API bool lw_intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float *o_t, float *o_u);
 
 LIGHTWARE_API void lw_calcPlaneFromPoints(lw_vec3 p0, lw_vec3 p1, lw_vec3 p2, lw_vec4 o_plane);
 
@@ -484,6 +487,7 @@ typedef struct LW_Camera {
 LIGHTWARE_API void lw_calcCameraFrustum(LW_Camera *const cam);
 LIGHTWARE_API void lw_calcCameraProjection(LW_Camera *const cam);
 LIGHTWARE_API LW_Frustum lw_calcFrustumFromPoly(lw_vec3 *polygon, unsigned num_verts, lw_vec3 view_point);
+LIGHTWARE_API void lw_screenPointToRay(LW_Camera cam, int width, int height, lw_vec2 point, lw_vec3 o_pos, lw_vec3 o_dir);
 
 LIGHTWARE_API bool lw_loadPortalWorld(const char *path, float scale, LW_PortalWorld *o_pod);
 LIGHTWARE_API void lw_recalcLinePlane(LW_LineDef *const linedef);

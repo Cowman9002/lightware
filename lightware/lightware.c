@@ -108,13 +108,14 @@ int lw_start(LW_Context *const context) {
         context->last_mouse_button_bitset = context->mouse_button_bitset;
         context->last_mouse_x             = context->mouse_x;
         context->last_mouse_y             = context->mouse_y;
-        context->scroll = 0;
+        context->scroll                   = 0;
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 case SDL_QUIT:
                     return 0;
                 case SDL_MOUSEWHEEL:
                     context->scroll = event.wheel.preciseY;
+                    break;
                 case SDL_MOUSEMOTION:
                     context->mouse_x = event.motion.x;
                     context->mouse_y = event.motion.y;
@@ -156,6 +157,11 @@ int lw_start(LW_Context *const context) {
 void *lw_getUserData(LW_Context *const context) {
     if (context == NULL) return NULL;
     return context->user_data;
+}
+
+float lw_getSeconds(LW_Context *const context) {
+    uint64_t t = SDL_GetTicks64();
+    return (float)t / 1000.0f;
 }
 
 void lw_getFramebufferDimentions(LW_Framebuffer *const frame_buffer, lw_ivec2 o_dims) {

@@ -38,9 +38,9 @@ int main() {
         return -1;
     }
 
-    editor.width = init.logical_width;
+    editor.width  = init.logical_width;
     editor.height = init.logical_height;
-    if(!editorInit(&editor)) return -1;
+    if (!editorInit(&editor)) return -1;
 
     int result = lw_start(context);
 
@@ -49,12 +49,25 @@ int main() {
 }
 
 int editorUpdate(Editor *const editor, float dt, LW_Context *const context) {
-    if(lw_isKeyDown(context, LW_KeyS) && (lw_isKey(context, LW_KeyLCtrl) || lw_isKey(context, LW_KeyLCtrl))) {
-        lw_savePortalWorld("world.pod", editor->world);
-        printf("Saved file to 'world.pod'\n");
+    if (lw_isKeyDown(context, LW_KeyS) && (lw_isKey(context, LW_KeyLCtrl) || lw_isKey(context, LW_KeyLCtrl))) {
+        if(lw_savePortalWorld("world.pod", editor->world)) {
+            printf("Saved to 'world.pod'\n");
+        } else {
+            printf("Failed to saved to 'world.pod'\n");
+        }
+    } else if (lw_isKeyDown(context, LW_KeyO) && (lw_isKey(context, LW_KeyLCtrl) || lw_isKey(context, LW_KeyLCtrl))) {
+        LW_PortalWorld pod;
+        LW_SectorList_init(&pod.sectors);
+        if (lw_loadPortalWorld("world.pod", &pod)) {
+            lw_freePortalWorld(editor->world);
+            editor->world = pod;
+            printf("Loaded 'world.pod'\n");
+        } else {
+            printf("Failed to load 'world.pod'\n");
+        }
     }
 
-    if(editor->view_3d) {
+    if (editor->view_3d) {
         return editor3dUpdate(editor, dt, context);
     } else {
         return editor2dUpdate(editor, dt, context);
@@ -62,7 +75,7 @@ int editorUpdate(Editor *const editor, float dt, LW_Context *const context) {
 }
 
 int editorRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_Context *const context) {
-    if(editor->view_3d) {
+    if (editor->view_3d) {
         return editor3dRender(editor, framebuffer, context);
     } else {
         return editor2dRender(editor, framebuffer, context);

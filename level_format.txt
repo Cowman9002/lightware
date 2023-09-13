@@ -3,17 +3,17 @@
 Header:
 magic                   4bytes      "LWBB"
 version                 u32         
+checksum                u32         
 num_sectors             u32         
-sector_table_start      u32         start in bytes
-subsector_table_start   u32         start in bytes
-wall_table_start        u32         start in bytes
+num_subsectors          u32         
+num_walls               u32
 
 //
 //  SECTORS
 //
 
 Sector 0:
-num_subsectors         u32
+num_subsectors          u32
 num_walls               u32
 first_subsector_offset  u32         offset into subsector table
 first_wall_offset       u32         offset into wall table

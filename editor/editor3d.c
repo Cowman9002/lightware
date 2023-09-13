@@ -25,9 +25,10 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
     editor->ray_hit_type    = RayHitType_None;
     LW_Sector *sector       = editor->cam3d.sector;
     LW_Subsector *subsector = NULL;
+    unsigned ssid           = editor->cam3d.subsector;
 
     if (sector != NULL) {
-        subsector = &sector->subsectors[editor->cam3d.subsector];
+        subsector = &sector->subsectors[ssid];
         casting   = true;
     }
 
@@ -99,30 +100,102 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
             // check if portal
             LW_LineDef const *line = &sector->walls[editor->ray_hit_type - RayHitType_Wall0];
             if (line->portal_sector != NULL) {
-                unsigned s = lw_getSubSector(line->portal_sector, editor->intersect_point);
-                subsector  = &line->portal_sector->subsectors[s];
-                if (editor->intersect_point[2] >= subsector->floor_height && editor->intersect_point[2] <= subsector->ceiling_height) {
+                unsigned s       = lw_getSubSector(line->portal_sector, editor->intersect_point);
+                LW_Subsector *ss = &line->portal_sector->subsectors[s];
+                if (editor->intersect_point[2] >= ss->floor_height && editor->intersect_point[2] <= ss->ceiling_height) {
                     // continue casting
-                    sector  = line->portal_sector;
-                    casting = true;
+                    sector    = line->portal_sector;
+                    subsector = ss;
+                    ssid      = s;
+                    casting   = true;
                 }
             }
         }
     }
 
-    float high_lower      = lw_getMouseScroll(context) + (lw_isKeyDown(context, LW_KeyQ) - lw_isKeyDown(context, LW_KeyZ));
-    float high_lower_mult = lw_isKey(context, LW_KeyLCtrl) ? 1.0f / 32.0f : 1.0f;
+    float high_lower = lw_getMouseScroll(context) + (lw_isKeyDown(context, LW_KeyQ) - lw_isKeyDown(context, LW_KeyZ));
 
-    switch (editor->ray_hit_type) {
-        case RayHitType_None: break;
-        case RayHitType_Ceiling:
-            subsector->ceiling_height += high_lower * high_lower_mult;
-            break;
-        case RayHitType_Floor:
-            subsector->floor_height += high_lower * high_lower_mult;
-            break;
-        default:
-            // walls
+    if (high_lower != 0.0f) {
+        float snapping_val = lw_isKey(context, LW_KeyLCtrl) ? 1.0f / 32.0f : 1.0f;
+
+        switch (editor->ray_hit_type) {
+            case RayHitType_None: break;
+            case RayHitType_Ceiling:
+                subsector->ceiling_height += high_lower * snapping_val;
+                subsector->ceiling_height = roundf(subsector->ceiling_height / snapping_val) * snapping_val;
+
+                // prevent clipping within subsector
+                if (subsector->ceiling_height < subsector->floor_height)
+                    subsector->ceiling_height = subsector->floor_height;
+
+                // prevent clipping with neighboring subsectors
+                if (ssid + 1 < sector->num_subsectors && subsector->ceiling_height > sector->subsectors[ssid + 1].floor_height)
+                    subsector->ceiling_height = sector->subsectors[ssid + 1].floor_height;
+
+                break;
+
+            case RayHitType_Floor:
+                subsector->floor_height += high_lower * snapping_val;
+                subsector->floor_height = roundf(subsector->floor_height / snapping_val) * snapping_val;
+
+                // prevent clipping within subsector
+                if (subsector->floor_height > subsector->ceiling_height)
+                    subsector->floor_height = subsector->ceiling_height;
+
+                // prevent clipping with neighboring subsectors
+                if (ssid > 0 && subsector->floor_height < sector->subsectors[ssid - 1].ceiling_height)
+                    subsector->floor_height = sector->subsectors[ssid - 1].ceiling_height;
+                break;
+
+            default:
+                // walls
+        }
+    }
+
+    if (sector != NULL && subsector != NULL) {
+        if (lw_isKeyDown(context, LW_KeyF)) {
+            if (lw_isKey(context, LW_KeyLCtrl)) {
+                // remove subsector
+                if (sector->num_subsectors > 1) {
+                    if (ssid == 0) {
+                        // expand upper subsector to take up this subsector's space
+                        unsigned new_ssid                         = ssid + 1;
+                        sector->subsectors[new_ssid].floor_height = subsector->floor_height;
+                    } else {
+                        // expand lower subsector to take up this subsector's space
+                        unsigned new_ssid                           = ssid - 1;
+                        sector->subsectors[new_ssid].ceiling_height = subsector->ceiling_height;
+                    }
+                    // move subsectors down
+                    --sector->num_subsectors;
+                    for (unsigned i = ssid; i < sector->num_subsectors; ++i) {
+                        sector->subsectors[i] = sector->subsectors[i + 1];
+                    }
+                }
+
+            } else {
+                // Add subsector
+                unsigned new_ssid = ssid + 1;
+
+                // allocate memory
+                ++sector->num_subsectors;
+                sector->subsectors = realloc(sector->subsectors, sector->num_subsectors * sizeof(*sector->subsectors));
+                subsector = &sector->subsectors[ssid];
+
+                // move subsectors up
+                for (unsigned i = sector->num_subsectors - 1; i > new_ssid; --i) {
+                    sector->subsectors[i] = sector->subsectors[i - 1];
+                }
+
+                // set values
+                float new_ceiling = (subsector->ceiling_height + subsector->floor_height) * 0.5f - 4.0f / 32.0f;
+                float new_floor   = (subsector->ceiling_height + subsector->floor_height) * 0.5f + 4.0f / 32.0f;
+
+                sector->subsectors[new_ssid].ceiling_height = subsector->ceiling_height;
+                sector->subsectors[new_ssid].floor_height   = new_floor;
+                subsector->ceiling_height                   = new_ceiling;
+            }
+        }
     }
 
     return LW_EXIT_OK;
@@ -178,7 +251,7 @@ int editor3dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
             circle.radius  = editor->height * lerp(outer_radius, inner_radius, lerp_val) * inv_dst;
 
             LW_Color color = colors[i];
-            if(i < color_i) {
+            if (i < color_i) {
                 color = lw_shadeColor(color, 180);
             }
             lw_fillCircle(framebuffer, circle, color);
@@ -245,7 +318,7 @@ static void _input(Editor *const editor, float dt, LW_Context *const context) {
     editor->cam3d.pos[1] += movement_rot[1] * dt * 5.0f;
     editor->cam3d.pos[2] += z * dt * 5.0f;
 
-    editor->cam3d.sector     = lw_getSector(editor->world, editor->cam3d.pos);
+    editor->cam3d.sector    = lw_getSector(editor->world, editor->cam3d.pos);
     editor->cam3d.subsector = lw_getSubSector(editor->cam3d.sector, editor->cam3d.pos);
 
     lw_mat4 translation, rotation, rot_yaw, rot_pitch;

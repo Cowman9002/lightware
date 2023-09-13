@@ -143,12 +143,12 @@ bool LIST_METHOD(pop_back)(LIST_TAG *const list, LIST_ITEM_TYPE *o_item) {
 }
 
 bool LIST_METHOD(remove_at)(LIST_TAG *const list, size_t location, LIST_ITEM_TYPE *o_item) {
-    if (location == 0) {
+    if (location > list->num_nodes) {
+        return false;
+    } else if (location == 0) {
         return LIST_METHOD(pop_front)(list, o_item);
     } else if (location == list->num_nodes) {
         return LIST_METHOD(pop_back)(list, o_item);
-    } else if (location > list->num_nodes) {
-        return false;
     } else {
         LIST_NODE_TAG *remove_point = list->head->next;
         --location;
@@ -170,7 +170,7 @@ bool LIST_METHOD(remove_at)(LIST_TAG *const list, size_t location, LIST_ITEM_TYP
 }
 
 bool LIST_METHOD(remove)(LIST_TAG *const list, LIST_ITEM_TYPE *item) {
-    if(list->num_nodes == 0) return false;
+    if (list->num_nodes == 0) return false;
 
     if (&list->head->item == item) {
         return LIST_METHOD(pop_front)(list, NULL);
@@ -194,8 +194,8 @@ bool LIST_METHOD(remove)(LIST_TAG *const list, LIST_ITEM_TYPE *item) {
     return false;
 }
 
-unsigned LIST_METHOD(find_index)(LIST_TAG *const list, LIST_ITEM_TYPE *item) {
-    if(list->num_nodes == 0) return 0;
+size_t LIST_METHOD(find_index)(LIST_TAG *const list, LIST_ITEM_TYPE *item) {
+    if (list->num_nodes == 0) return 0;
 
     if (&list->head->item == item) {
         return 0;
@@ -204,13 +204,31 @@ unsigned LIST_METHOD(find_index)(LIST_TAG *const list, LIST_ITEM_TYPE *item) {
     }
 
     LIST_NODE_TAG *node = list->head->next;
-    for (unsigned i = 0; node != NULL; node = node->next, ++i) {
+    for (unsigned i = 1; node != NULL; node = node->next, ++i) {
         if (&node->item == item) {
             return i;
         }
     }
 
     return list->num_nodes;
+}
+
+LIST_ITEM_TYPE *LIST_METHOD(get)(LIST_TAG *const list, size_t location) {
+    if (location > list->num_nodes) {
+        return NULL;
+    } else if (location == 0) {
+        return &list->head->item;
+    } else if (location == list->num_nodes - 1) {
+        return &list->tail->item;
+    } else {
+        LIST_NODE_TAG *node = list->head->next;
+        --location;
+        for (; location > 0; --location) {
+            node = node->next;
+        }
+
+        return &node->item;
+    }
 }
 
 #undef LIST_TAG

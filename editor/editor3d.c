@@ -157,15 +157,7 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
             if (lw_isKey(context, LW_KeyLCtrl)) {
                 // remove subsector
                 if (sector->num_subsectors > 1) {
-                    if (ssid == 0) {
-                        // expand upper subsector to take up this subsector's space
-                        unsigned new_ssid                         = ssid + 1;
-                        sector->subsectors[new_ssid].floor_height = subsector->floor_height;
-                    } else {
-                        // expand lower subsector to take up this subsector's space
-                        unsigned new_ssid                           = ssid - 1;
-                        sector->subsectors[new_ssid].ceiling_height = subsector->ceiling_height;
-                    }
+                    // fill in space
                     // move subsectors down
                     --sector->num_subsectors;
                     for (unsigned i = ssid; i < sector->num_subsectors; ++i) {

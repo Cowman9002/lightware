@@ -145,8 +145,8 @@ bool _deserializeLevelFile(LevelFile level_file, LW_PortalWorld *pod) {
             new_sector.walls[j].start[0]      = level_wall.x;
             new_sector.walls[j].start[1]      = level_wall.y;
             new_sector.walls[j].next          = level_wall.next;
-            new_sector.walls[j].portal_sector = (intptr_t)level_wall.portal_sector;
-            new_sector.walls[j].portal_wall   = (intptr_t)level_wall.portal_wall;
+            new_sector.walls[j].portal_sector = (LW_Sector *)(intptr_t)level_wall.portal_sector;
+            new_sector.walls[j].portal_wall   = (LW_LineDef *)(intptr_t)level_wall.portal_wall;
 
             new_sector.walls[level_wall.next].prev = j;
         }
@@ -244,11 +244,11 @@ bool _serializeLevelFile(LW_PortalWorld pod, LevelFile *level_file) {
                 unsigned index = LW_SectorList_find_index(&pod.sectors, line->portal_sector);
 
                 if (index >= pod.sectors.num_nodes) {
-                    level_file->walls[start_wall + j].portal_wall = 0;
+                    level_file->walls[start_wall + j].portal_wall   = 0;
                     level_file->walls[start_wall + j].portal_sector = 0;
                 } else {
                     level_file->walls[start_wall + j].portal_sector = index + 1;
-                    level_file->walls[start_wall + j].portal_wall = (line->portal_wall - line->portal_sector->walls) / sizeof(*line->portal_wall) + 1;
+                    level_file->walls[start_wall + j].portal_wall   = ((intptr_t)line->portal_wall - (intptr_t)line->portal_sector->walls) / sizeof(*line->portal_wall) + 1;
                 }
             }
         }

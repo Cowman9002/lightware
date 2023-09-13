@@ -223,7 +223,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                 for (; node != NULL; node = node->next) {
                     LW_Sector *sec = &node->item;
                     for (unsigned i = 0; i < sec->num_walls; ++i) {
-                        LW_LineDef *const line = &sec->walls[i];
+                        LW_LineDef *line = &sec->walls[i];
 
                         a[0] = line->start[0], a[1] = line->start[1];
                         b[0] = sec->walls[line->next].start[0], b[1] = sec->walls[line->next].start[1];
@@ -255,6 +255,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             // add new point
                             ++sec->num_walls;
                             sec->walls                 = realloc(sec->walls, sec->num_walls * sizeof(*sec->walls));
+                            line = &sec->walls[i];
                             LW_LineDef *const new_line = &sec->walls[sec->num_walls - 1];
 
                             // initialize new point

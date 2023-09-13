@@ -113,16 +113,14 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
         }
     }
 
-    float high_lower = lw_getMouseScroll(context) + (lw_isKeyDown(context, LW_KeyQ) - lw_isKeyDown(context, LW_KeyZ));
+    float high_lower = !lw_isKey(context, LW_KeyLCtrl) * lw_getMouseScroll(context) + (lw_isKeyDown(context, LW_KeyQ) - lw_isKeyDown(context, LW_KeyZ));
 
     if (high_lower != 0.0f) {
-        float snapping_val = lw_isKey(context, LW_KeyLCtrl) ? 1.0f / 32.0f : 1.0f;
-
         switch (editor->ray_hit_type) {
             case RayHitType_None: break;
             case RayHitType_Ceiling:
-                subsector->ceiling_height += high_lower * snapping_val;
-                subsector->ceiling_height = roundf(subsector->ceiling_height / snapping_val) * snapping_val;
+                subsector->ceiling_height += high_lower * editor->floor_snap_val;
+                subsector->ceiling_height = roundf(subsector->ceiling_height / editor->floor_snap_val) * editor->floor_snap_val;
 
                 // prevent clipping within subsector
                 if (subsector->ceiling_height < subsector->floor_height)
@@ -135,8 +133,8 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                 break;
 
             case RayHitType_Floor:
-                subsector->floor_height += high_lower * snapping_val;
-                subsector->floor_height = roundf(subsector->floor_height / snapping_val) * snapping_val;
+                subsector->floor_height += high_lower * editor->floor_snap_val;
+                subsector->floor_height = roundf(subsector->floor_height / editor->floor_snap_val) * editor->floor_snap_val;
 
                 // prevent clipping within subsector
                 if (subsector->floor_height > subsector->ceiling_height)
@@ -172,7 +170,7 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                 // allocate memory
                 ++sector->num_subsectors;
                 sector->subsectors = realloc(sector->subsectors, sector->num_subsectors * sizeof(*sector->subsectors));
-                subsector = &sector->subsectors[ssid];
+                subsector          = &sector->subsectors[ssid];
 
                 // move subsectors up
                 for (unsigned i = sector->num_subsectors - 1; i > new_ssid; --i) {
@@ -269,11 +267,20 @@ int editor3dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
     lw_drawString(framebuffer, (lw_ivec2){ 5, 5 }, editor->c_font, editor->font, editor->text_buffer);
 
     snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "POS: %.2f %.2f %.2f", editor->cam3d.pos[0], editor->cam3d.pos[1], editor->cam3d.pos[2]);
-    lw_drawString(framebuffer, (lw_ivec2){ editor->width - editor->font.char_width * strlen(editor->text_buffer) - 5, 5 },
+    lw_drawString(framebuffer, (lw_ivec2){ 5, 5 + editor->font.texture.height * 1 },
                   editor->c_font, editor->font, editor->text_buffer);
 
     snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "ROT: %.2f %.2f", editor->cam3d.yaw, editor->cam3d.pitch);
-    lw_drawString(framebuffer, (lw_ivec2){ editor->width - editor->font.char_width * strlen(editor->text_buffer) - 5, 5 + editor->font.texture.height * 1 },
+    lw_drawString(framebuffer, (lw_ivec2){ 5, 5 + editor->font.texture.height * 2 },
+                  editor->c_font, editor->font, editor->text_buffer);
+
+    if (editor->floor_snap_val >= 1.0f) {
+        snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "SNAP: %4.0f", editor->floor_snap_val);
+    } else {
+        float d = 1.0f / editor->floor_snap_val;
+        snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "SNAP: %*s1/%.0f", d < 10 ? 1 : 0, "", d);
+    }
+    lw_drawString(framebuffer, (lw_ivec2){ editor->width - editor->font.char_width * strlen(editor->text_buffer) - 5, 5 + editor->font.texture.height * 0 },
                   editor->c_font, editor->font, editor->text_buffer);
 
     return LW_EXIT_OK;
@@ -284,31 +291,40 @@ int editor3dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void _input(Editor *const editor, float dt, LW_Context *const context) {
+    if (!lw_isKey(context, LW_KeyLCtrl)) {
+        lw_vec2 movement, movement_rot;
+        movement[0] = lw_isKey(context, LW_KeyD) - lw_isKey(context, LW_KeyA);
+        movement[1] = lw_isKey(context, LW_KeyW) - lw_isKey(context, LW_KeyS);
+        lw_normalize2d(movement);
 
-    lw_vec2 movement, movement_rot;
-    movement[0] = lw_isKey(context, LW_KeyD) - lw_isKey(context, LW_KeyA);
-    movement[1] = lw_isKey(context, LW_KeyW) - lw_isKey(context, LW_KeyS);
-    lw_normalize2d(movement);
+        float z = lw_isKey(context, LW_KeySpace) - lw_isKey(context, LW_KeyLShift);
+        float r = lw_isKey(context, LW_KeyLeft) - lw_isKey(context, LW_KeyRight);
+        float s = lw_isKey(context, LW_KeyUp) - lw_isKey(context, LW_KeyDown);
 
-    float z = lw_isKey(context, LW_KeySpace) - lw_isKey(context, LW_KeyLShift);
-    float r = lw_isKey(context, LW_KeyLeft) - lw_isKey(context, LW_KeyRight);
-    float s = lw_isKey(context, LW_KeyUp) - lw_isKey(context, LW_KeyDown);
+        editor->cam3d.yaw += r * dt * 2.0f;
+        editor->cam3d.pitch += s * dt * 1.5f;
 
-    editor->cam3d.yaw += r * dt * 2.0f;
-    editor->cam3d.pitch += s * dt * 1.5f;
+        while (editor->cam3d.yaw > M_PI)
+            editor->cam3d.yaw -= 2 * M_PI;
+        while (editor->cam3d.yaw < -M_PI)
+            editor->cam3d.yaw += 2 * M_PI;
 
-    while (editor->cam3d.yaw > M_PI)
-        editor->cam3d.yaw -= 2 * M_PI;
-    while (editor->cam3d.yaw < -M_PI)
-        editor->cam3d.yaw += 2 * M_PI;
+        editor->cam3d.pitch = clamp(editor->cam3d.pitch, -M_PI * 0.5f, M_PI * 0.5f);
 
-    editor->cam3d.pitch = clamp(editor->cam3d.pitch, -M_PI * 0.5f, M_PI * 0.5f);
+        lw_rot2d(movement, -editor->cam3d.yaw, movement_rot);
 
-    lw_rot2d(movement, -editor->cam3d.yaw, movement_rot);
+        editor->cam3d.pos[0] += movement_rot[0] * dt * 5.0f;
+        editor->cam3d.pos[1] += movement_rot[1] * dt * 5.0f;
+        editor->cam3d.pos[2] += z * dt * 5.0f;
+    }
 
-    editor->cam3d.pos[0] += movement_rot[0] * dt * 5.0f;
-    editor->cam3d.pos[1] += movement_rot[1] * dt * 5.0f;
-    editor->cam3d.pos[2] += z * dt * 5.0f;
+    if ((lw_isKeyDown(context, LW_KeyEquals) || (lw_isKey(context, LW_KeyLCtrl) && lw_getMouseScroll(context) > 0)) && editor->floor_snap_val < MAX_GRID) {
+        editor->floor_snap_val *= 2;
+    }
+
+    if ((lw_isKeyDown(context, LW_KeyMinus) || (lw_isKey(context, LW_KeyLCtrl) && lw_getMouseScroll(context) < 0)) && editor->floor_snap_val > MIN_GRID) {
+        editor->floor_snap_val /= 2;
+    }
 
     editor->cam3d.sector    = lw_getSector(editor->world, editor->cam3d.pos);
     editor->cam3d.subsector = lw_getSubSector(editor->cam3d.sector, editor->cam3d.pos);

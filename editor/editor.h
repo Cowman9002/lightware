@@ -11,6 +11,7 @@
 #define MIN_GRID (1.0f / 32.0f)
 
 #define TEXT_BUFFER_SIZE 64
+#define FILE_NAME_BUFFER_SIZE 512
 
 #define POINT_RENDER_RADIUS 4
 #define LINE_SELECTION_RADIUS 3
@@ -32,6 +33,10 @@ typedef enum State {
 } State;
 
 typedef struct Editor {
+    char *open_file;
+    char *open_file_relative;
+    char *project_directory;
+
     char *text_buffer;
     LW_FontTexture font;
     int width, height;
@@ -48,6 +53,8 @@ typedef struct Editor {
     RayHitType ray_hit_type;
     lw_vec3 intersect_point;
     float intersect_dist;
+
+    float floor_snap_val;
 
     // Selection
 

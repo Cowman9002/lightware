@@ -20,8 +20,13 @@ bool editorInit(Editor *const editor) {
     editor->font.char_width = editor->font.texture.width / 95;
     editor->text_buffer     = calloc(1, TEXT_BUFFER_SIZE);
 
+    editor->open_file          = calloc(1, FILE_NAME_BUFFER_SIZE);
+    editor->open_file_relative = calloc(1, FILE_NAME_BUFFER_SIZE);
+    editor->project_directory  = calloc(1, FILE_NAME_BUFFER_SIZE);
+
     editor->cam3d.view_frustum.num_planes = 6;
     editor->cam3d.view_frustum.planes     = malloc(editor->cam3d.view_frustum.num_planes * sizeof(*editor->cam3d.view_frustum.planes));
+    editor->floor_snap_val = 1.0f;
 
     editor->mouse_snapped_pos[3] = 1.0f;
 
@@ -255,7 +260,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             // add new point
                             ++sec->num_walls;
                             sec->walls                 = realloc(sec->walls, sec->num_walls * sizeof(*sec->walls));
-                            line = &sec->walls[i];
+                            line                       = &sec->walls[i];
                             LW_LineDef *const new_line = &sec->walls[sec->num_walls - 1];
 
                             // initialize new point
@@ -693,8 +698,8 @@ int editor2dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
         LW_Color color = RGB(255 - editor->c_background.r, 255 - editor->c_background.g, 255 - editor->c_background.b);
 
         for (int i = -5; i <= 5; ++i) {
-            lw_setPixel(framebuffer, (lw_uvec2){ b[0] + i, b[1] }, color);
-            lw_setPixel(framebuffer, (lw_uvec2){ b[0], b[1] + i }, color);
+            lw_setPixel(framebuffer, (lw_uvec2){ b[0] + i, b[1] + i }, color);
+            lw_setPixel(framebuffer, (lw_uvec2){ b[0] + i, b[1] - i }, color);
         }
     }
 
@@ -848,6 +853,8 @@ int editor2dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
         lw_fillCircle(framebuffer, circle, editor->c_new_vertices);
     }
 
+    // TOP LEFT
+
     switch (editor->state) {
         case StateIdle:
             snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "Map view");
@@ -871,6 +878,8 @@ int editor2dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
 
     snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "Selected: %u", editor->selected_points_len);
     lw_drawString(framebuffer, (lw_ivec2){ 5, 5 + editor->font.texture.height * 2 }, editor->c_font, editor->font, editor->text_buffer);
+
+    // TOP RIGHT
 
     {
         int rot_val = editor->cam_rot == 3 ? -90 : editor->cam_rot * 90.0f;
@@ -913,11 +922,11 @@ static void _input(Editor *const editor, float dt, LW_Context *const context) {
     }
 
     if (editor->grid_active) {
-        if (lw_isKeyDown(context, LW_KeyEquals) && editor->grid_size < MAX_GRID) {
+        if ((lw_isKeyDown(context, LW_KeyEquals) || (lw_isKey(context, LW_KeyLCtrl) && lw_getMouseScroll(context) > 0)) && editor->grid_size < MAX_GRID) {
             editor->grid_size *= 2;
         }
 
-        if (lw_isKeyDown(context, LW_KeyMinus) && editor->grid_size > MIN_GRID) {
+        if ((lw_isKeyDown(context, LW_KeyMinus) || (lw_isKey(context, LW_KeyLCtrl) && lw_getMouseScroll(context) < 0)) && editor->grid_size > MIN_GRID) {
             editor->grid_size /= 2;
         }
     }
@@ -925,7 +934,7 @@ static void _input(Editor *const editor, float dt, LW_Context *const context) {
     if (lw_isKeyDown(context, LW_KeyP)) {
         editor->specter_select = !editor->specter_select;
     }
-    
+
     if (lw_isKeyDown(context, LW_KeyO)) {
         // TODO: Enable vertex snapping
     }
@@ -938,25 +947,27 @@ static void _input(Editor *const editor, float dt, LW_Context *const context) {
         editor->cam_rot = (editor->cam_rot - 1 + 4) % 4;
     }
 
-    lw_vec2 movement, movement_rot;
-    movement[0] = lw_isKey(context, LW_KeyD) - lw_isKey(context, LW_KeyA);
-    movement[1] = lw_isKey(context, LW_KeyW) - lw_isKey(context, LW_KeyS);
-    lw_normalize2d(movement);
+    if (!lw_isKey(context, LW_KeyLCtrl)) {
+        lw_vec2 movement, movement_rot;
+        movement[0] = lw_isKey(context, LW_KeyD) - lw_isKey(context, LW_KeyA);
+        movement[1] = lw_isKey(context, LW_KeyW) - lw_isKey(context, LW_KeyS);
+        lw_normalize2d(movement);
 
-    switch (editor->cam_rot) {
-        case 0: movement_rot[0] = movement[0], movement_rot[1] = movement[1]; break;
-        case 1: movement_rot[0] = movement[1], movement_rot[1] = -movement[0]; break;
-        case 2: movement_rot[0] = -movement[0], movement_rot[1] = -movement[1]; break;
-        case 3: movement_rot[0] = -movement[1], movement_rot[1] = movement[0]; break;
-    }
+        switch (editor->cam_rot) {
+            case 0: movement_rot[0] = movement[0], movement_rot[1] = movement[1]; break;
+            case 1: movement_rot[0] = movement[1], movement_rot[1] = -movement[0]; break;
+            case 2: movement_rot[0] = -movement[0], movement_rot[1] = -movement[1]; break;
+            case 3: movement_rot[0] = -movement[1], movement_rot[1] = movement[0]; break;
+        }
 
-    editor->cam_pos[0] += movement_rot[0] * dt * editor->zoom * 100.0f * 3.0f;
-    editor->cam_pos[1] += movement_rot[1] * dt * editor->zoom * 100.0f * 3.0f;
+        editor->cam_pos[0] += movement_rot[0] * dt * editor->zoom * 100.0f * 3.0f;
+        editor->cam_pos[1] += movement_rot[1] * dt * editor->zoom * 100.0f * 3.0f;
 
-    float z = (lw_isKey(context, LW_KeyQ) - lw_isKey(context, LW_KeyZ)) * 0.3f + lw_getMouseScroll(context) * 2.0f;
-    if (z != 0.0f) {
-        editor->zoom_t = clamp(editor->zoom_t + (z * dt), 0.0f, 1.0f);
-        editor->zoom   = logerp(MIN_ZOOM, MAX_ZOOM, editor->zoom_t);
+        float z = (lw_isKey(context, LW_KeyQ) - lw_isKey(context, LW_KeyZ)) * 0.3f + lw_getMouseScroll(context) * 2.0f;
+        if (z != 0.0f) {
+            editor->zoom_t = clamp(editor->zoom_t + (z * dt), 0.0f, 1.0f);
+            editor->zoom   = logerp(MIN_ZOOM, MAX_ZOOM, editor->zoom_t);
+        }
     }
 }
 

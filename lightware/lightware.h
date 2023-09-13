@@ -108,6 +108,8 @@ LIGHTWARE_API int lw_start(LW_Context *const context);
 LIGHTWARE_API void *lw_getUserData(LW_Context *const context);
 LIGHTWARE_API float lw_getSeconds(LW_Context *const context);
 
+LIGHTWARE_API void lw_setWindowTitle(LW_Context *const context, const char *title);
+
 //
 //  INPUT
 //

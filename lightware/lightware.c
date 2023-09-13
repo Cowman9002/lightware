@@ -164,6 +164,10 @@ float lw_getSeconds(LW_Context *const context) {
     return (float)t / 1000.0f;
 }
 
+void lw_setWindowTitle(LW_Context *const context, const char *title) {
+    SDL_SetWindowTitle(context->window, title);
+}
+
 void lw_getFramebufferDimentions(LW_Framebuffer *const frame_buffer, lw_ivec2 o_dims) {
     o_dims[0] = frame_buffer->width;
     o_dims[1] = frame_buffer->height;

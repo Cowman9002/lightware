@@ -105,20 +105,37 @@ int editorUpdate(Editor *const editor, float dt, LW_Context *const context) {
     if (editor->project_directory[0] == 0) {
         if (s_recent_projects.hover_index >= 0 && lw_isMouseButtonDown(context, 0)) {
             if (s_recent_projects.hover_index == 0) {
-                if(!doOpenFolderDialog(editor->project_directory, FILE_NAME_BUFFER_SIZE)) {
+                if (!doOpenFolderDialog(editor->project_directory, FILE_NAME_BUFFER_SIZE)) {
                     return LW_EXIT_OK;
                 }
             } else {
-                if(!pathExists(s_recent_projects.data[s_recent_projects.hover_index - 1])) {
-
+                if (!pathExists(s_recent_projects.data[s_recent_projects.hover_index - 1])) {
                     // remove recent
-                    s_recent_projects.len -= 1;
-                    s_recent_projects.start = (s_recent_projects.start - 1 + s_recent_projects.len) % s_recent_projects.len;
-                    for (unsigned i = s_recent_projects.hover_index - 1; i != s_recent_projects.start;) {
-                        unsigned j = (i + 1) % s_recent_projects.len;
-                        strcpy(s_recent_projects.data[i], s_recent_projects.data[j]);
-                        i = j;
+                    unsigned sm1 = (s_recent_projects.start - 1 + s_recent_projects.len) % s_recent_projects.len;
+
+                    if (s_recent_projects.hover_index == s_recent_projects.start) {
+                        // remove head
+                        for (unsigned i = s_recent_projects.start; i < s_recent_projects.len; ++i) {
+                            strcpy(s_recent_projects.data[i - 1], s_recent_projects.data[i]);
+                        }
+                        s_recent_projects.start = sm1;
+                    } else {
+                        unsigned i = (s_recent_projects.hover_index - 1 + s_recent_projects.len) % s_recent_projects.len;
+
+                        // shift everything after up according to circle buffer
+                        for (; i != sm1;) {
+                            unsigned j = (i - 1 + s_recent_projects.len) % s_recent_projects.len;
+                            strcpy(s_recent_projects.data[i], s_recent_projects.data[j]);
+                            i = j;
+                        }
+
+                        // shift everything back according to linear array
+                        for (i = s_recent_projects.start + 1; i < s_recent_projects.len; ++i) {
+                            strcpy(s_recent_projects.data[i - 1], s_recent_projects.data[i]);
+                        }
                     }
+
+                    s_recent_projects.len -= 1;
 
                     doErrorPopup("Not Found!", "Project directory could not be found.\n It might have been deleted or moved.");
                     return LW_EXIT_OK;
@@ -233,6 +250,8 @@ int editorRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_Con
     lw_vec2 mouse_posf = { mouse_pos[0], mouse_pos[1] };
 
     if (editor->project_directory[0] == 0) {
+        lw_fillBuffer(framebuffer, LW_COLOR_BLACK);
+
         s_recent_projects.hover_index = -1;
         LW_Aabb rect;
         LW_Color color;

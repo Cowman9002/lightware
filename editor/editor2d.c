@@ -449,6 +449,35 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                     editor->data2d.move_origin[0]     = editor->data2d.selected_points[editor->data2d.select_point_index]->start[0];
                     editor->data2d.move_origin[1]     = editor->data2d.selected_points[editor->data2d.select_point_index]->start[1];
                 }
+            } else if (isInputActionDown(context, InputName_selectSector)) {
+                LW_Sector *sector = lw_getSector(editor->world, editor->data2d.mouse_world_pos);
+                if (sector != NULL) {
+                    editor->data2d.selected_points_len = sector->num_walls;
+
+                    if (editor->data2d.selected_points_len >= editor->data2d.selected_points_capacity) {
+                        editor->data2d.selected_points_capacity = editor->data2d.selected_points_len;
+                        editor->data2d.selected_points          = realloc(editor->data2d.selected_points, editor->data2d.selected_points_capacity * sizeof(*editor->data2d.selected_points));
+                    }
+
+                    for (unsigned i = 0; i < sector->num_walls; ++i) {
+                        editor->data2d.selected_points[i] = &sector->walls[i];
+                    }
+                }
+            } else if (isInputActionDown(context, InputName_multiSelectSector)) {
+                LW_Sector *sector = lw_getSector(editor->world, editor->data2d.mouse_world_pos);
+                if (sector != NULL) {
+                    unsigned start_offset = editor->data2d.selected_points_len;
+                    editor->data2d.selected_points_len += sector->num_walls;
+
+                    if (editor->data2d.selected_points_len >= editor->data2d.selected_points_capacity) {
+                        editor->data2d.selected_points_capacity = editor->data2d.selected_points_len;
+                        editor->data2d.selected_points          = realloc(editor->data2d.selected_points, editor->data2d.selected_points_capacity * sizeof(*editor->data2d.selected_points));
+                    }
+
+                    for (unsigned i = 0; i < sector->num_walls; ++i) {
+                        editor->data2d.selected_points[start_offset + i] = &sector->walls[i];
+                    }
+                }
             }
             break;
             /////////////////////////////////////////////////////////////
@@ -598,42 +627,48 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                 if (lw_pointInCircle(circle, snapped_screen_pos)) {
                     if (editor->data2d.new_sector.num_walls > 2) {
                         // finish sector
+                        LW_Sector *new_sector = &editor->data2d.new_sector;
 
-                        editor->data2d.new_sector.walls[editor->data2d.new_sector.num_walls - 1].next = 0;
-                        editor->data2d.new_sector.walls[0].prev                                = editor->data2d.new_sector.num_walls - 1;
+                        new_sector->walls[new_sector->num_walls - 1].next = 0;
+                        new_sector->walls[0].prev                         = new_sector->num_walls - 1;
 
                         {
                             // ensure points are counter-clockwise
-                            float angle;
-                            lw_vec2 a, b;
-                            LW_LineDef c, d, e;
-                            c = editor->data2d.new_sector.walls[0];
-                            d = editor->data2d.new_sector.walls[c.next];
-                            e = editor->data2d.new_sector.walls[d.next];
+                            // https://stackoverflow.com/questions/1165647/how-to-determine-if-a-list-of-polygon-points-are-in-clockwise-order
 
-                            a[0]  = d.start[0] - c.start[0];
-                            a[1]  = d.start[1] - c.start[1];
-                            b[0]  = e.start[0] - d.start[0];
-                            b[1]  = e.start[1] - d.start[1];
-                            angle = lw_angleBetween2d(a, b);
+                            float sum;
+                            for (unsigned i = 0; i < new_sector->num_walls; ++i) {
+                                sum += (new_sector->walls[(new_sector->walls[i].next)].start[0] - new_sector->walls[i].start[0]) *
+                                       (new_sector->walls[(new_sector->walls[i].next)].start[1] + new_sector->walls[i].start[1]);
+                            }
 
-                            if (angle > 0.0f) {
+                            if (sum > 1.0f) {
                                 // reverse winding
-
                                 for (unsigned i = 0; i < editor->data2d.new_sector.num_walls; ++i) {
                                     swap(unsigned, editor->data2d.new_sector.walls[i].prev, editor->data2d.new_sector.walls[i].next);
                                 }
                             }
                         }
 
-                        LW_SectorList_push_back(&editor->world.sectors, editor->data2d.new_sector);
-                        LW_Sector *sector = &editor->world.sectors.tail->item;
+                        {
+                            // add to world
+                            LW_SectorList_push_back(&editor->world.sectors, editor->data2d.new_sector);
+                            LW_Sector *sector = &editor->world.sectors.tail->item;
 
-                        for (unsigned i = 0; i < sector->num_walls; ++i) {
-                            // set sector
-                            sector->walls[i].sector = sector;
-                            // calculate wall planes
-                            lw_recalcLinePlane(&sector->walls[i]);
+                            // finish lines
+                            for (unsigned i = 0; i < sector->num_walls; ++i) {
+                                // set sector
+                                sector->walls[i].sector = sector;
+                                // calculate wall planes
+                                lw_recalcLinePlane(&sector->walls[i]);
+                            }
+                        }
+
+                        // xor join with world
+                        LW_SectorListNode *node = editor->world.sectors.head;
+                        // tail is the just added node, and if we xor with that the entire sector gets removed
+                        for (; node != editor->world.sectors.tail; node = node->next) {
+                            LW_Sector *sector = &node->item;
                         }
 
                         editor->data2d.state = StateIdle;

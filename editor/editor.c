@@ -76,8 +76,10 @@ bool editorInit(Editor *const editor) {
 
     setInputAction(InputName_cancel, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyEscape, .disallowed_modifiers = MODIFIER_SHIFT, .required_modifiers = 0 });
 
-    setInputAction(InputName_selectPoint, (InputAction){ .type = InputTypeButton, .major.button = 0, .disallowed_modifiers = MODIFIER_SHIFT, .required_modifiers = 0 });
-    setInputAction(InputName_multiSelect, (InputAction){ .type = InputTypeButton, .major.button = 0, .disallowed_modifiers = 0, .required_modifiers = MODIFIER_SHIFT });
+    setInputAction(InputName_selectPoint, (InputAction){ .type = InputTypeButton, .major.button = 0, .disallowed_modifiers = MODIFIER_SHIFT | MODIFIER_CTRL, .required_modifiers = 0 });
+    setInputAction(InputName_multiSelect, (InputAction){ .type = InputTypeButton, .major.button = 0, .disallowed_modifiers = MODIFIER_CTRL, .required_modifiers = MODIFIER_SHIFT });
+    setInputAction(InputName_selectSector, (InputAction){ .type = InputTypeButton, .major.button = 0, .disallowed_modifiers = MODIFIER_SHIFT, .required_modifiers = MODIFIER_CTRL });
+    setInputAction(InputName_multiSelectSector, (InputAction){ .type = InputTypeButton, .major.button = 0, .disallowed_modifiers = 0, .required_modifiers = MODIFIER_CTRL | MODIFIER_SHIFT });
 
     setInputAction(InputName_newSector, (InputAction){ .type = InputTypeKey, .major.key = LW_KeySpace, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_deletePoints, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyX, .disallowed_modifiers = 0, .required_modifiers = 0 });

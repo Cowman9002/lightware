@@ -37,6 +37,8 @@ typedef enum InputName {
 
     InputName_selectPoint,
     InputName_multiSelect,
+    InputName_selectSector,
+    InputName_multiSelectSector,
 
     InputName_newSector,
     InputName_deletePoints,

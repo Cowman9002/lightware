@@ -196,7 +196,7 @@ int editorUpdate(Editor *const editor, float dt, LW_Context *const context) {
             if (lw_isKey(context, LW_KeyLShift) || lw_isKey(context, LW_KeyRShift) || editor->open_file[0] == 0) {
                 char file_name[FILE_NAME_BUFFER_SIZE] = { 0 };
 
-                if (doSaveDialog("Portal World (*.pod)\0*.POD\0\0", "pod", editor->project_directory, file_name, FILE_NAME_BUFFER_SIZE)) {
+                if (doSaveDialog("Portal World (*.pod)\0*.pod\0\0", "pod", editor->project_directory, file_name, FILE_NAME_BUFFER_SIZE)) {
                     if (lw_savePortalWorld(file_name, editor->world)) {
                         // set open file name
                         strncpy(editor->open_file, file_name, FILE_NAME_BUFFER_SIZE);
@@ -217,7 +217,7 @@ int editorUpdate(Editor *const editor, float dt, LW_Context *const context) {
         } else if (lw_isKeyDown(context, LW_KeyO) && (lw_isKey(context, LW_KeyLCtrl) || lw_isKey(context, LW_KeyLCtrl))) {
             char file_name[FILE_NAME_BUFFER_SIZE] = { 0 };
 
-            if (doOpenDialog("Portal World (*.pod)\0*.POD\0\0", editor->project_directory, file_name, FILE_NAME_BUFFER_SIZE)) {
+            if (doOpenDialog("Portal World (*.pod)\0*.pod\0\0", editor->project_directory, file_name, FILE_NAME_BUFFER_SIZE)) {
                 LW_PortalWorld pod;
                 LW_SectorList_init(&pod.sectors);
                 if (lw_loadPortalWorld(file_name, &pod)) {

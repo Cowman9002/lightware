@@ -253,6 +253,7 @@ bool _serializeLevelFile(LW_PortalWorld pod, LevelFile *level_file) {
             }
         }
     }
+    printf("\n");
 
     return true;
 }

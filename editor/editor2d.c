@@ -257,11 +257,24 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             // new point in world space
                             lw_mat4MulVec4(editor->to_world_mat, closest_point, c);
 
+                            // save old pointer for later
+                            LW_LineDef *old_wall_ptr = sec->walls;
+
                             // add new point
                             ++sec->num_walls;
                             sec->walls                 = realloc(sec->walls, sec->num_walls * sizeof(*sec->walls));
                             line                       = &sec->walls[i];
                             LW_LineDef *const new_line = &sec->walls[sec->num_walls - 1];
+
+                            // update portal pointers if needed
+                            if(old_wall_ptr != sec->walls) {
+                                for(unsigned j = 0; j < sec->num_walls - 1; ++j) {
+                                    if(sec->walls[j].portal_wall != NULL) {
+                                        intptr_t ptr_offset = (intptr_t)sec->walls[j].portal_wall->portal_wall - (intptr_t)old_wall_ptr;
+                                        sec->walls[j].portal_wall->portal_wall = (LW_LineDef*)((intptr_t)sec->walls + ptr_offset);
+                                    }
+                                }
+                            }
 
                             // initialize new point
                             new_line->start[0] = c[0], new_line->start[1] = c[1];

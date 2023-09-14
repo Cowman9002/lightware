@@ -23,12 +23,6 @@ bool editorInit(Editor *const editor) {
     editor->open_file_relative = calloc(1, FILE_NAME_BUFFER_SIZE);
     editor->project_directory  = calloc(1, FILE_NAME_BUFFER_SIZE);
 
-    editor->cam3d.view_frustum.num_planes = 6;
-    editor->cam3d.view_frustum.planes     = malloc(editor->cam3d.view_frustum.num_planes * sizeof(*editor->cam3d.view_frustum.planes));
-    editor->floor_snap_val                = 1.0f;
-
-    editor->mouse_snapped_pos[3] = 1.0f;
-
     editor->c_background = RGB(10, 10, 40);
     editor->c_grid       = RGB(60, 80, 120);
     editor->c_font       = RGB(240, 240, 210);
@@ -45,21 +39,28 @@ bool editorInit(Editor *const editor) {
     editor->c_selection_box        = RGB(245, 245, 125);
     editor->c_highlighted_vertices = RGB(240, 212, 30);
 
-    editor->grid_active = true;
-    editor->grid_size   = 8.0f;
+    editor->data2d.grid_active          = true;
+    editor->data2d.grid_size            = 8.0f;
+    editor->data2d.mouse_snapped_pos[3] = 1.0f;
 
-    editor->specter_select = true;
+    editor->data2d.specter_select = true;
 
-    editor->zoom   = 0.08;
-    editor->zoom_t = inv_logerp(MIN_ZOOM, MAX_ZOOM, editor->zoom);
+    editor->data2d.zoom   = 0.08;
+    editor->data2d.zoom_t = inv_logerp(MIN_ZOOM, MAX_ZOOM, editor->data2d.zoom);
 
-    editor->cam3d.aspect_ratio = (float)editor->width / (float)editor->height;
-    editor->cam3d.far_plane    = 500.0f;
-    editor->cam3d.fov          = 80 * TO_RADS;
-    editor->cam3d.near_plane   = 0.3;
-    lw_calcCameraProjection(&editor->cam3d);
+    editor->data3d.camera.view_frustum.num_planes = 6;
+    editor->data3d.camera.view_frustum.planes     = malloc(editor->data3d.camera.view_frustum.num_planes * sizeof(*editor->data3d.camera.view_frustum.planes));
+    editor->data3d.floor_snap_val                 = 1.0f;
+
+    editor->data3d.camera.aspect_ratio = (float)editor->width / (float)editor->height;
+    editor->data3d.camera.far_plane    = 500.0f;
+    editor->data3d.camera.fov          = 80 * TO_RADS;
+    editor->data3d.camera.near_plane   = 0.3;
+    lw_calcCameraProjection(&editor->data3d.camera);
 
     LW_SectorList_init(&editor->world.sectors);
+
+    setInputAction(InputName_swapViews, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyTab, .disallowed_modifiers = 0, .required_modifiers = 0 });
 
     setInputAction(InputName_moveForwards, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyW, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_moveBackwards, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyS, .disallowed_modifiers = MODIFIER_CTRL, .required_modifiers = 0 });
@@ -72,6 +73,17 @@ bool editorInit(Editor *const editor) {
     setInputAction(InputName_increaseGrid, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyRightBracket, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_decreaseGrid, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyLeftBracket, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_specterSelect, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyP, .disallowed_modifiers = 0, .required_modifiers = 0 });
+
+    setInputAction(InputName_cancel, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyEscape, .disallowed_modifiers = MODIFIER_SHIFT, .required_modifiers = 0 });
+
+    setInputAction(InputName_selectPoint, (InputAction){ .type = InputTypeButton, .major.button = 0, .disallowed_modifiers = MODIFIER_SHIFT, .required_modifiers = 0 });
+    setInputAction(InputName_multiSelect, (InputAction){ .type = InputTypeButton, .major.button = 0, .disallowed_modifiers = 0, .required_modifiers = MODIFIER_SHIFT });
+
+    setInputAction(InputName_newSector, (InputAction){ .type = InputTypeKey, .major.key = LW_KeySpace, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_deletePoints, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyX, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_splitLine, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyC, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_autoPortal, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyV, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_selectionBox, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyB, .disallowed_modifiers = 0, .required_modifiers = 0 });
 
     return true;
 }
@@ -110,8 +122,8 @@ bool isInputActionDown(LW_Context *const context, InputName action) {
     if (!_modifierTest(context, action)) return false;
 
     switch (s_actions[action].type) {
-        case InputTypeKey: return lw_isKeyUp(context, s_actions[action].major.key);
-        case InputTypeButton: return lw_isMouseButtonUp(context, s_actions[action].major.button);
+        case InputTypeKey: return lw_isKeyDown(context, s_actions[action].major.key);
+        case InputTypeButton: return lw_isMouseButtonDown(context, s_actions[action].major.button);
     }
     return false;
 }

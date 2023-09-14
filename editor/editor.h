@@ -19,6 +19,8 @@
 #define AUTO_PORTAL_EPSILON 0.003
 
 typedef enum InputName {
+    InputName_swapViews,
+
     InputName_moveForwards,
     InputName_moveBackwards,
     InputName_moveLeft,
@@ -30,8 +32,20 @@ typedef enum InputName {
     InputName_increaseGrid,
     InputName_decreaseGrid,
     InputName_specterSelect,
+
+    InputName_cancel,
+
+    InputName_selectPoint,
+    InputName_multiSelect,
+
+    InputName_newSector,
+    InputName_deletePoints,
+    InputName_splitLine,
+    InputName_autoPortal,
+    InputName_selectionBox,
+
     InputName_size,
-}InputName;
+} InputName;
 
 #define MODIFIER_SHIFT (1 << 0)
 #define MODIFIER_CTRL (1 << 1)
@@ -41,22 +55,15 @@ typedef struct InputAction {
     enum type {
         InputTypeKey,
         InputTypeButton,
-    }type;
+    } type;
 
     union major {
         LW_Key key;
         unsigned button;
-    }major;
-    uint8_t required_modifiers; // these must be active
+    } major;
+    uint8_t required_modifiers;   // these must be active
     uint8_t disallowed_modifiers; // these cannot be active
-}InputAction;
-
-typedef enum RayHitType {
-    RayHitType_None = 0,
-    RayHitType_Floor,
-    RayHitType_Ceiling,
-    RayHitType_Wall0,
-} RayHitType;
+} InputAction;
 
 typedef enum State {
     StateIdle = 0,
@@ -65,30 +72,7 @@ typedef enum State {
     StateSelectionBox,
 } State;
 
-typedef struct Editor {
-    char *open_file;
-    char *open_file_relative;
-    char *project_directory;
-
-    char *text_buffer;
-    LW_FontTexture font;
-    int width, height;
-
-    LW_Color c_background, c_grid, c_font;
-    LW_Color c_walls, c_vertices, c_portal;
-    LW_Color c_new_walls, c_new_vertices, c_start_vertex;
-    LW_Color c_sel_vertex, c_selection_box, c_highlighted_vertices;
-
-    // 3d mode
-    bool view_3d;
-    LW_Camera cam3d;
-
-    RayHitType ray_hit_type;
-    lw_vec3 intersect_point;
-    float intersect_dist;
-
-    float floor_snap_val;
-
+struct EditorData2d {
     // Selection
 
     LW_LineDef **selected_points;
@@ -113,8 +97,6 @@ typedef struct Editor {
     lw_vec4 mouse_world_pos;
     lw_vec4 mouse_snapped_pos;
 
-    LW_PortalWorld world;
-
     // state machine
     State state;
 
@@ -128,6 +110,45 @@ typedef struct Editor {
     // selection box
     LW_Aabb selection_box;
     lw_vec2 selection_box_pivot;
+};
+
+typedef enum RayHitType {
+    RayHitType_None = 0,
+    RayHitType_Floor,
+    RayHitType_Ceiling,
+    RayHitType_Wall0,
+} RayHitType;
+
+struct EditorData3d {
+    LW_Camera camera;
+    
+    RayHitType ray_hit_type;
+    lw_vec3 intersect_point;
+    float intersect_dist;
+
+    float floor_snap_val;
+};
+
+typedef struct Editor {
+    char *open_file;
+    char *open_file_relative;
+    char *project_directory;
+
+    LW_PortalWorld world;
+    
+    char *text_buffer;
+    LW_FontTexture font;
+    int width, height;
+
+    LW_Color c_background, c_grid, c_font;
+    LW_Color c_walls, c_vertices, c_portal;
+    LW_Color c_new_walls, c_new_vertices, c_start_vertex;
+    LW_Color c_sel_vertex, c_selection_box, c_highlighted_vertices;
+    
+    bool view_3d;
+
+    struct EditorData3d data3d;
+    struct EditorData2d data2d;
 
 } Editor;
 

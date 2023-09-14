@@ -297,11 +297,11 @@ typedef enum LW_Key {
     LW_KeyRGui   = 231, /**< windows, command (apple), meta */
 
     LW_KeycodeSize
-} LW_Keycode;
+} LW_Key;
 
-LIGHTWARE_API bool lw_isKey(LW_Context *const context, LW_Keycode key);
-LIGHTWARE_API bool lw_isKeyDown(LW_Context *const context, LW_Keycode key);
-LIGHTWARE_API bool lw_isKeyUp(LW_Context *const context, LW_Keycode key);
+LIGHTWARE_API bool lw_isKey(LW_Context *const context, LW_Key key);
+LIGHTWARE_API bool lw_isKeyDown(LW_Context *const context, LW_Key key);
+LIGHTWARE_API bool lw_isKeyUp(LW_Context *const context, LW_Key key);
 
 LIGHTWARE_API bool lw_isMouseButton(LW_Context *const context, unsigned button);
 LIGHTWARE_API bool lw_isMouseButtonDown(LW_Context *const context, unsigned button);

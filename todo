@@ -1,3 +1,11 @@
+TODAY:
+[x] fix level save corruption
+[ ] change input handling to be an input map
+[ ] create structs to hold 3d and 2d view variables instead of having them free-floating in the main struct
+[ ] change sector adding to be xor process (share side ? remove, not shared ? add, share opposite side ? portal)
+[ ] add sector joining with xor logic (share side ? remove, not shared ? add)
+
+OVERALL:
 [x] Render sector
 [x] Portal clipping
 [x] Sector over sector

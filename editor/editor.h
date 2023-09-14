@@ -18,6 +18,39 @@
 
 #define AUTO_PORTAL_EPSILON 0.003
 
+typedef enum InputName {
+    InputName_moveForwards,
+    InputName_moveBackwards,
+    InputName_moveLeft,
+    InputName_moveRight,
+    InputName_rotateLeft,
+    InputName_rotateRight,
+
+    InputName_toggleGrid,
+    InputName_increaseGrid,
+    InputName_decreaseGrid,
+    InputName_specterSelect,
+    InputName_size,
+}InputName;
+
+#define MODIFIER_SHIFT (1 << 0)
+#define MODIFIER_CTRL (1 << 1)
+#define MODIFIER_ALT (1 << 2)
+
+typedef struct InputAction {
+    enum type {
+        InputTypeKey,
+        InputTypeButton,
+    }type;
+
+    union major {
+        LW_Key key;
+        unsigned button;
+    }major;
+    uint8_t required_modifiers; // these must be active
+    uint8_t disallowed_modifiers; // these cannot be active
+}InputAction;
+
 typedef enum RayHitType {
     RayHitType_None = 0,
     RayHitType_Floor,
@@ -107,3 +140,8 @@ int editor2dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
 
 int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context);
 int editor3dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_Context *const context);
+
+void setInputAction(InputName action, InputAction val);
+bool isInputAction(LW_Context *const context, InputName action);
+bool isInputActionDown(LW_Context *const context, InputName action);
+bool isInputActionUp(LW_Context *const context, InputName action);

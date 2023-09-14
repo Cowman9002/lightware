@@ -173,15 +173,15 @@ void lw_getFramebufferDimentions(LW_Framebuffer *const frame_buffer, lw_ivec2 o_
     o_dims[1] = frame_buffer->height;
 }
 
-bool lw_isKey(LW_Context *const context, LW_Keycode key) {
+bool lw_isKey(LW_Context *const context, LW_Key key) {
     return context->keys[key];
 }
 
-bool lw_isKeyDown(LW_Context *const context, LW_Keycode key) {
+bool lw_isKeyDown(LW_Context *const context, LW_Key key) {
     return context->keys[key] && !context->last_keys[key];
 }
 
-bool lw_isKeyUp(LW_Context *const context, LW_Keycode key) {
+bool lw_isKeyUp(LW_Context *const context, LW_Key key) {
     return !context->keys[key] && context->last_keys[key];
 }
 

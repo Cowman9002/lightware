@@ -6,64 +6,8 @@
 #include <malloc.h>
 #include <string.h>
 
-float logerp(float a, float b, float t) {
-    return b * powf(a / b, t);
-}
-
-// solve for t based on desired r
-float inv_logerp(float a, float b, float r) {
-    return logf(r / b) / log(a / b);
-}
-
-bool editorInit(Editor *const editor) {
-    if (!lw_loadTexture("res/fonts/small.png", &editor->font.texture)) return false;
-    editor->font.char_width = editor->font.texture.width / 95;
-    editor->text_buffer     = calloc(1, TEXT_BUFFER_SIZE);
-
-    editor->open_file          = calloc(1, FILE_NAME_BUFFER_SIZE);
-    editor->open_file_relative = calloc(1, FILE_NAME_BUFFER_SIZE);
-    editor->project_directory  = calloc(1, FILE_NAME_BUFFER_SIZE);
-
-    editor->cam3d.view_frustum.num_planes = 6;
-    editor->cam3d.view_frustum.planes     = malloc(editor->cam3d.view_frustum.num_planes * sizeof(*editor->cam3d.view_frustum.planes));
-    editor->floor_snap_val = 1.0f;
-
-    editor->mouse_snapped_pos[3] = 1.0f;
-
-    editor->c_background = RGB(10, 10, 40);
-    editor->c_grid       = RGB(60, 80, 120);
-    editor->c_font       = RGB(240, 240, 210);
-
-    editor->c_walls    = RGB(200, 200, 200);
-    editor->c_vertices = RGB(30, 140, 240);
-    editor->c_portal   = RGB(200, 40, 80);
-
-    editor->c_new_walls    = RGB(128, 128, 128);
-    editor->c_new_vertices = RGB(80, 30, 240);
-    editor->c_start_vertex = RGB(250, 190, 100);
-
-    editor->c_sel_vertex           = RGB(250, 230, 80);
-    editor->c_selection_box        = RGB(245, 245, 125);
-    editor->c_highlighted_vertices = RGB(240, 212, 30);
-
-    editor->grid_active = true;
-    editor->grid_size   = 8.0f;
-
-    editor->specter_select = true;
-
-    editor->zoom   = 0.08;
-    editor->zoom_t = inv_logerp(MIN_ZOOM, MAX_ZOOM, editor->zoom);
-
-    editor->cam3d.aspect_ratio = (float)editor->width / (float)editor->height;
-    editor->cam3d.far_plane    = 500.0f;
-    editor->cam3d.fov          = 80 * TO_RADS;
-    editor->cam3d.near_plane   = 0.3;
-    lw_calcCameraProjection(&editor->cam3d);
-
-    LW_SectorList_init(&editor->world.sectors);
-
-    return true;
-}
+float logerp(float a, float b, float t);
+float inv_logerp(float a, float b, float r);
 
 static void _input(Editor *const editor, float dt, LW_Context *const context);
 static void _recalcViewMatrices(Editor *const editor, float dt, LW_Context *const context);
@@ -930,21 +874,21 @@ int editor2dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void _input(Editor *const editor, float dt, LW_Context *const context) {
-    if (lw_isKeyDown(context, LW_KeyG)) {
+    if(isInputActionDown(context, InputName_toggleGrid)) {
         editor->grid_active = !editor->grid_active;
     }
 
     if (editor->grid_active) {
-        if ((lw_isKeyDown(context, LW_KeyEquals) || (lw_isKey(context, LW_KeyLCtrl) && lw_getMouseScroll(context) > 0)) && editor->grid_size < MAX_GRID) {
+        if (isInputActionDown(context, InputName_increaseGrid) && editor->grid_size < MAX_GRID) {
             editor->grid_size *= 2;
         }
 
-        if ((lw_isKeyDown(context, LW_KeyMinus) || (lw_isKey(context, LW_KeyLCtrl) && lw_getMouseScroll(context) < 0)) && editor->grid_size > MIN_GRID) {
+        if (isInputActionDown(context, InputName_decreaseGrid) && editor->grid_size > MIN_GRID) {
             editor->grid_size /= 2;
         }
     }
 
-    if (lw_isKeyDown(context, LW_KeyP)) {
+    if (isInputActionDown(context, InputName_specterSelect)) {
         editor->specter_select = !editor->specter_select;
     }
 
@@ -952,35 +896,33 @@ static void _input(Editor *const editor, float dt, LW_Context *const context) {
         // TODO: Enable vertex snapping
     }
 
-    if (lw_isKeyDown(context, LW_KeyE)) {
+    if (isInputActionDown(context, InputName_rotateLeft)) {
         editor->cam_rot = (editor->cam_rot + 1) % 4;
     }
 
-    if (lw_isKeyDown(context, LW_KeyR)) {
+    if (isInputActionDown(context, InputName_rotateRight)) {
         editor->cam_rot = (editor->cam_rot - 1 + 4) % 4;
     }
 
-    if (!lw_isKey(context, LW_KeyLCtrl)) {
-        lw_vec2 movement, movement_rot;
-        movement[0] = lw_isKey(context, LW_KeyD) - lw_isKey(context, LW_KeyA);
-        movement[1] = lw_isKey(context, LW_KeyW) - lw_isKey(context, LW_KeyS);
-        lw_normalize2d(movement);
+    lw_vec2 movement, movement_rot;
+    movement[0] = isInputAction(context, InputName_moveRight) - isInputAction(context, InputName_moveLeft);
+    movement[1] = isInputAction(context, InputName_moveForwards) - isInputAction(context, InputName_moveBackwards);
+    lw_normalize2d(movement);
 
-        switch (editor->cam_rot) {
-            case 0: movement_rot[0] = movement[0], movement_rot[1] = movement[1]; break;
-            case 1: movement_rot[0] = movement[1], movement_rot[1] = -movement[0]; break;
-            case 2: movement_rot[0] = -movement[0], movement_rot[1] = -movement[1]; break;
-            case 3: movement_rot[0] = -movement[1], movement_rot[1] = movement[0]; break;
-        }
+    switch (editor->cam_rot) {
+        case 0: movement_rot[0] = movement[0], movement_rot[1] = movement[1]; break;
+        case 1: movement_rot[0] = -movement[1], movement_rot[1] = -movement[0]; break;
+        case 2: movement_rot[0] = -movement[0], movement_rot[1] = -movement[1]; break;
+        case 3: movement_rot[0] = movement[1], movement_rot[1] = movement[0]; break;
+    }
 
-        editor->cam_pos[0] += movement_rot[0] * dt * editor->zoom * 100.0f * 3.0f;
-        editor->cam_pos[1] += movement_rot[1] * dt * editor->zoom * 100.0f * 3.0f;
+    editor->cam_pos[0] += movement_rot[0] * dt * editor->zoom * 100.0f * 3.0f;
+    editor->cam_pos[1] += movement_rot[1] * dt * editor->zoom * 100.0f * 3.0f;
 
-        float z = (lw_isKey(context, LW_KeyQ) - lw_isKey(context, LW_KeyZ)) * 0.3f + lw_getMouseScroll(context) * 2.0f;
-        if (z != 0.0f) {
-            editor->zoom_t = clamp(editor->zoom_t + (z * dt), 0.0f, 1.0f);
-            editor->zoom   = logerp(MIN_ZOOM, MAX_ZOOM, editor->zoom_t);
-        }
+    float z = lw_getMouseScroll(context);
+    if (z != 0.0f) {
+        editor->zoom_t = clamp(editor->zoom_t + (z * 2.0f * dt), 0.0f, 1.0f);
+        editor->zoom   = logerp(MIN_ZOOM, MAX_ZOOM, editor->zoom_t);
     }
 }
 
@@ -996,7 +938,7 @@ static void _recalcViewMatrices(Editor *const editor, float dt, LW_Context *cons
 
     lw_mat4Translate((lw_vec3){ -editor->cam_pos[0], -editor->cam_pos[1], 0.0f }, translate);
     lw_mat4Scale((lw_vec3){ inv_zoom, inv_zoom, inv_zoom }, scale);
-    lw_mat4RotateZ(-cam_rot, rotation);
+    lw_mat4RotateZ(cam_rot, rotation);
     lw_mat4Mul(scale, rotation, tmp);
     lw_mat4Mul(tmp, translate, view);
     lw_mat4Mul(proj, view, editor->to_screen_mat);
@@ -1008,7 +950,7 @@ static void _recalcViewMatrices(Editor *const editor, float dt, LW_Context *cons
 
     lw_mat4Translate((lw_vec3){ editor->cam_pos[0], editor->cam_pos[1], 0.0f }, translate);
     lw_mat4Scale((lw_vec3){ editor->zoom, editor->zoom, editor->zoom }, scale);
-    lw_mat4RotateZ(cam_rot, rotation);
+    lw_mat4RotateZ(-cam_rot, rotation);
     lw_mat4Mul(translate, rotation, tmp);
     lw_mat4Mul(tmp, scale, view);
     lw_mat4Mul(view, proj, editor->to_world_mat);

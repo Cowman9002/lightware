@@ -170,6 +170,7 @@ bool _deserializeLevelFile(LevelFile level_file, LW_PortalWorld *pod) {
                 unsigned wall_index = (intptr_t)node->item.walls[i].portal_wall - 1;
                 if (wall_index >= node->item.walls[i].portal_sector->num_walls) {
                     return false;
+                    // wall_index = 0;
                 }
 
                 node->item.walls[i].portal_wall = &node->item.walls[i].portal_sector->walls[wall_index];
@@ -253,7 +254,6 @@ bool _serializeLevelFile(LW_PortalWorld pod, LevelFile *level_file) {
             }
         }
     }
-    printf("\n");
-
+    
     return true;
 }

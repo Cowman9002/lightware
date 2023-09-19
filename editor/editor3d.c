@@ -21,11 +21,11 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
     lw_vec4 mouse_screen_posv4 = { mouse_screen_pos[0], mouse_screen_pos[1], 0.0f, 1.0f };
 
     // raycast sector
-    bool casting            = false;
-    editor->data3d.ray_hit_type    = RayHitType_None;
-    LW_Sector *sector       = editor->data3d.camera.sector;
-    LW_Subsector *subsector = NULL;
-    unsigned ssid           = editor->data3d.camera.subsector;
+    bool casting                = false;
+    editor->data3d.ray_hit_type = RayHitType_None;
+    LW_Sector *sector           = editor->data3d.camera.sector;
+    LW_Subsector *subsector     = NULL;
+    unsigned ssid               = editor->data3d.camera.subsector;
 
     if (sector != NULL) {
         subsector = &sector->subsectors[ssid];
@@ -115,39 +115,54 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
     float high_lower = !lw_isKey(context, LW_KeyLCtrl) * lw_getMouseScroll(context) + (lw_isKeyDown(context, LW_KeyQ) - lw_isKeyDown(context, LW_KeyZ));
 
-    if (high_lower != 0.0f) {
-        switch (editor->data3d.ray_hit_type) {
-            case RayHitType_None: break;
-            case RayHitType_Ceiling:
+    switch (editor->data3d.ray_hit_type) {
+        case RayHitType_None: break;
+        case RayHitType_Ceiling:
+            if (high_lower != 0.0f) {
                 subsector->ceiling_height += high_lower * editor->data3d.floor_snap_val;
                 subsector->ceiling_height = roundf(subsector->ceiling_height / editor->data3d.floor_snap_val) * editor->data3d.floor_snap_val;
+            }
 
-                // prevent clipping within subsector
-                if (subsector->ceiling_height < subsector->floor_height)
-                    subsector->ceiling_height = subsector->floor_height;
+            if (lw_isKeyDown(context, LW_KeyC) && lw_isKey(context, LW_KeyLCtrl)) {
+                editor->data3d.copied_height_val = subsector->ceiling_height;
+            } else if (lw_isKeyDown(context, LW_KeyV) && lw_isKey(context, LW_KeyLCtrl)) {
+                subsector->ceiling_height = editor->data3d.copied_height_val;
+            }
 
-                // prevent clipping with neighboring subsectors
-                if (ssid + 1 < sector->num_subsectors && subsector->ceiling_height > sector->subsectors[ssid + 1].floor_height)
-                    subsector->ceiling_height = sector->subsectors[ssid + 1].floor_height;
+            // prevent clipping within subsector
+            if (subsector->ceiling_height < subsector->floor_height)
+                subsector->ceiling_height = subsector->floor_height;
 
-                break;
+            // prevent clipping with neighboring subsectors
+            if (ssid + 1 < sector->num_subsectors && subsector->ceiling_height > sector->subsectors[ssid + 1].floor_height)
+                subsector->ceiling_height = sector->subsectors[ssid + 1].floor_height;
 
-            case RayHitType_Floor:
+            break;
+
+        case RayHitType_Floor:
+            if (high_lower != 0.0f) {
                 subsector->floor_height += high_lower * editor->data3d.floor_snap_val;
                 subsector->floor_height = roundf(subsector->floor_height / editor->data3d.floor_snap_val) * editor->data3d.floor_snap_val;
+            }
 
-                // prevent clipping within subsector
-                if (subsector->floor_height > subsector->ceiling_height)
-                    subsector->floor_height = subsector->ceiling_height;
+            if (lw_isKeyDown(context, LW_KeyC) && lw_isKey(context, LW_KeyLCtrl)) {
+                editor->data3d.copied_height_val = subsector->floor_height;
+            } else if (lw_isKeyDown(context, LW_KeyV) && lw_isKey(context, LW_KeyLCtrl)) {
+                subsector->floor_height = editor->data3d.copied_height_val;
+            }
 
-                // prevent clipping with neighboring subsectors
-                if (ssid > 0 && subsector->floor_height < sector->subsectors[ssid - 1].ceiling_height)
-                    subsector->floor_height = sector->subsectors[ssid - 1].ceiling_height;
-                break;
+            // prevent clipping within subsector
+            if (subsector->floor_height > subsector->ceiling_height)
+                subsector->floor_height = subsector->ceiling_height;
 
-            default:
-                // walls
-        }
+            // prevent clipping with neighboring subsectors
+            if (ssid > 0 && subsector->floor_height < sector->subsectors[ssid - 1].ceiling_height)
+                subsector->floor_height = sector->subsectors[ssid - 1].ceiling_height;
+
+            break;
+
+        default:
+            // walls
     }
 
     if (sector != NULL && subsector != NULL) {
@@ -247,6 +262,10 @@ int editor3dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
             lw_fillCircle(framebuffer, circle, color);
         }
     }
+
+    snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "%.2f %.2f %.2f", editor->data3d.intersect_point[0], editor->data3d.intersect_point[1], editor->data3d.intersect_point[2]);
+    lw_drawString(framebuffer, (lw_ivec2){ 5, 5 + editor->font.texture.height * 0 },
+                  editor->c_font, editor->font, editor->text_buffer);
 
     snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "POS: %.2f %.2f %.2f", editor->data3d.camera.pos[0], editor->data3d.camera.pos[1], editor->data3d.camera.pos[2]);
     lw_drawString(framebuffer, (lw_ivec2){ 5, 5 + editor->font.texture.height * 1 },

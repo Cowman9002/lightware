@@ -500,7 +500,7 @@ LIGHTWARE_API void lw_freeSubsector(LW_Subsector subsector);
 LIGHTWARE_API void lw_freeSector(LW_Sector sector);
 LIGHTWARE_API void lw_freePortalWorld(LW_PortalWorld pod);
 
-LIGHTWARE_API bool lw_pointInSector(LW_Sector sector, lw_vec2 point);
+LIGHTWARE_API bool lw_pointInSector(LW_Sector sector, lw_vec2 point, float bias);
 LIGHTWARE_API LW_Sector *lw_getSector(LW_PortalWorld pod, lw_vec2 point);
 LIGHTWARE_API unsigned lw_getSubSector(LW_Sector *sector, lw_vec3 point);
 

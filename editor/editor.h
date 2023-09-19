@@ -129,6 +129,7 @@ struct EditorData3d {
     float intersect_dist;
 
     float floor_snap_val;
+    float copied_height_val;
 };
 
 typedef struct Editor {

@@ -1,10 +1,6 @@
 TODAY:
-[x] fix level save corruption
-[x] change input handling to be an input map
-[x] create structs to hold 3d and 2d view variables instead of having them free-floating in the main struct
-[ ] change sector adding to be xor process (share side ? remove, not shared ? add, share opposite side ? portal)
-[ ] add sector joining with xor logic (share side ? remove, not shared ? add)
-[x] fix how sector winding order is calculated
+[ ] sector adding subtracts from existing sectors
+[ ] fix issue when looking at same convex sector through another sector 
 
 OVERALL:
 [x] Render sector

@@ -171,7 +171,7 @@ bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t) {
     un *= s;
     denom *= s;
 
-    // t is segment, u is ray.
+    // t is seg0, u is seg1.
     if (tn < 0.0f || tn > denom || un < 0.0f || un > denom) return false;
 
     if (o_t != NULL) {

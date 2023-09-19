@@ -161,10 +161,10 @@ void lw_freePortalWorld(LW_PortalWorld pod) {
     LW_SectorList_free(pod.sectors);
 }
 
-bool lw_pointInSector(LW_Sector sector, lw_vec2 point) {
+bool lw_pointInSector(LW_Sector sector, lw_vec2 point, float bias) {
     lw_vec2 ray[2] = { { point[0], point[1] }, { -1.0f, 0.0f } };
     lw_vec2 line[2];
-    float t;
+    float t, u;
 
     unsigned num_intersections = 0;
 
@@ -176,7 +176,9 @@ bool lw_pointInSector(LW_Sector sector, lw_vec2 point) {
         line[1][0] = sector.walls[sector.walls[i].next].start[0];
         line[1][1] = sector.walls[sector.walls[i].next].start[1];
 
-        if (lw_intersectSegmentRay(line, ray, &t, NULL)) {
+        if (lw_intersectSegmentRay(line, ray, &t, &u)) {
+            if(u < bias) return false; // this point is on an edge
+
             // If hitting a vertex exactly, only count if other vertex is above the ray
             if (t != 0.0f && t != 1.0f) {
                 ++num_intersections;
@@ -195,7 +197,7 @@ LW_Sector *lw_getSector(LW_PortalWorld pod, lw_vec2 point) {
     // TODO: add bias to last known sector
     LW_Sector *sector = NULL;
     for (LW_SectorListNode *node = pod.sectors.head; node != NULL; node = node->next) {
-        if (lw_pointInSector(node->item, point)) {
+        if (lw_pointInSector(node->item, point, 0.0f)) {
             sector = &node->item;
             break;
         }

@@ -11,21 +11,51 @@ float inv_logerp(float a, float b, float r);
 
 static void _input(Editor *const editor, float dt, LW_Context *const context);
 static void _recalcViewMatrices(Editor *const editor, float dt, LW_Context *const context);
-static bool _validPortalOverlap(LW_LineDef *const line0, LW_LineDef *const line1) {
+
+static bool _pointsAreEqual(lw_vec2 const a, lw_vec2 const b) {
+    lw_vec2 difference;
+    // check
+    difference[0] = b[0] - a[0];
+    difference[1] = b[1] - a[1];
+    float sqdst   = lw_dot2d(difference, difference);
+
+    return sqdst <= AUTO_PORTAL_EPSILON * AUTO_PORTAL_EPSILON;
+}
+
+static bool _validPortalOverlap(LW_LineDef const *const line0, LW_LineDef const *const line1) {
+    lw_vec2 a, b;
+    a[0] = line1->start[0], a[1] = line1->start[1];
+    b[0] = line1->sector->walls[line1->next].start[0], b[1] = line1->sector->walls[line1->next].start[1];
+
+    // // check
+    // difference[0] = b[0] - line0->start[0];
+    // difference[1] = b[1] - line0->start[1];
+    // sqdst         = lw_dot2d(difference, difference);
+
+    if (!_pointsAreEqual(b, line0->start)) return false;
+
+    // difference[0] = a[0] - line0->sector->walls[line0->next].start[0];
+    // difference[1] = a[1] - line0->sector->walls[line0->next].start[1];
+    // sqdst         = lw_dot2d(difference, difference);
+
+    return _pointsAreEqual(a, line0->sector->walls[line0->next].start);
+}
+
+static bool _linesAreEqual(LW_LineDef const *const line0, LW_LineDef const *const line1) {
     lw_vec2 a, b, difference;
     float sqdst;
     a[0] = line1->start[0], a[1] = line1->start[1];
     b[0] = line1->sector->walls[line1->next].start[0], b[1] = line1->sector->walls[line1->next].start[1];
 
     // check
-    difference[0] = b[0] - line0->start[0];
-    difference[1] = b[1] - line0->start[1];
+    difference[0] = a[0] - line0->start[0];
+    difference[1] = a[1] - line0->start[1];
     sqdst         = lw_dot2d(difference, difference);
 
     if (sqdst > AUTO_PORTAL_EPSILON) return false;
 
-    difference[0] = a[0] - line0->sector->walls[line0->next].start[0];
-    difference[1] = a[1] - line0->sector->walls[line0->next].start[1];
+    difference[0] = b[0] - line0->sector->walls[line0->next].start[0];
+    difference[1] = b[1] - line0->sector->walls[line0->next].start[1];
     sqdst         = lw_dot2d(difference, difference);
 
     return sqdst <= AUTO_PORTAL_EPSILON;
@@ -106,13 +136,19 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                         // remove all selected points from that sector
                         unsigned n = editor->data2d.selected_points_len;
                         for (unsigned j = i + 1; j < n; ++j) {
-                            if (sector->num_walls == 0) break;
                             LW_LineDef *jline = editor->data2d.selected_points[j];
                             if (jline->sector == sector) {
                                 // swap remove
-                                --sector->num_walls;
                                 --editor->data2d.selected_points_len;
                                 editor->data2d.selected_points[j] = editor->data2d.selected_points[editor->data2d.selected_points_len];
+                            }
+                        }
+
+                        // unset portals
+                        for (unsigned j = 0; j < sector->num_walls; ++j) {
+                            if (sector->walls[j].portal_wall != NULL) {
+                                sector->walls[j].portal_wall->portal_sector = NULL;
+                                sector->walls[j].portal_wall->portal_wall   = NULL;
                             }
                         }
 
@@ -200,7 +236,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             }
 
                             // new point in world space
-                            lw_mat4MulVec4(editor->data2d.to_world_mat, closest_point, c);
+                            // lw_mat4MulVec4(editor->data2d.to_world_mat, closest_point, c);
 
                             // save old pointer for later
                             LW_LineDef *old_wall_ptr = sec->walls;
@@ -222,17 +258,21 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             }
 
                             // initialize new point
-                            new_line->start[0] = c[0], new_line->start[1] = c[1];
-                            memcpy(new_line->plane, line->plane, sizeof(new_line->plane)); // point added on line means point added on plane
+                            // new_line->start[0] = c[0], new_line->start[1] = c[1];
+                            new_line->sector   = sec;
+                            new_line->start[0] = editor->data2d.mouse_snapped_pos[0], new_line->start[1] = editor->data2d.mouse_snapped_pos[1];
+                            // memcpy(new_line->plane, line->plane, sizeof(new_line->plane)); // point added on line means point added on plane
                             new_line->portal_sector = NULL;
                             new_line->portal_wall   = NULL;
-                            new_line->sector        = sec;
 
                             // insert into polygon
                             new_line->next              = line->next;
                             new_line->prev              = i;
                             sec->walls[line->next].prev = sec->num_walls - 1;
                             line->next                  = sec->num_walls - 1;
+
+                            lw_recalcLinePlane(new_line);
+                            lw_recalcLinePlane(&sec->walls[new_line->prev]);
 
                             if (!editor->data2d.specter_select) goto _end_sector_loop;
                             break;
@@ -650,27 +690,112 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             }
                         }
 
-                        {
-                            // add to world
-                            LW_SectorList_push_back(&editor->world.sectors, editor->data2d.new_sector);
-                            LW_Sector *sector = &editor->world.sectors.tail->item;
+                        // add to world
+                        LW_SectorList_push_back(&editor->world.sectors, editor->data2d.new_sector);
+                        new_sector                               = &editor->world.sectors.tail->item;
+                        new_sector->subsectors[0].floor_height   = INFINITY;
+                        new_sector->subsectors[0].ceiling_height = -INFINITY;
 
-                            // finish lines
-                            for (unsigned i = 0; i < sector->num_walls; ++i) {
-                                // set sector
-                                sector->walls[i].sector = sector;
-                                // calculate wall planes
-                                lw_recalcLinePlane(&sector->walls[i]);
-                            }
+                        // finish lines
+                        for (unsigned i = 0; i < new_sector->num_walls; ++i) {
+                            // set sector
+                            new_sector->walls[i].sector = new_sector;
+                            // calculate wall planes
+                            lw_recalcLinePlane(&new_sector->walls[i]);
                         }
 
-                        // xor join with world
+                        // clip world around new sector
+
                         LW_SectorListNode *node = editor->world.sectors.head;
                         // tail is the just added node, and if we xor with that the entire sector gets removed
                         for (; node != editor->world.sectors.tail; node = node->next) {
                             LW_Sector *sector = &node->item;
+
+                            // check if new sector is inside or outside of sector
+                            bool all_outside = true;
+                            bool all_inside  = true;
+                            for (unsigned i = 0; i < new_sector->num_walls; ++i) {
+                                if (lw_pointInSector(*sector, new_sector->walls[i].start, 0.003f)) {
+                                    all_outside = false;
+                                } else {
+                                    all_inside = false;
+                                }
+
+                                if (!all_outside && !all_inside) break;
+                            }
+
+                            if (all_outside) {
+                                // if outside, add portals as needed
+                                for (unsigned i = 0; i < new_sector->num_walls; ++i) {
+                                    for (unsigned j = 0; j < sector->num_walls; ++j) {
+                                        if (_validPortalOverlap(&new_sector->walls[i], &sector->walls[j])) {
+                                            // TODO: This could be somewhere else
+                                            if (new_sector->subsectors[0].floor_height > sector->subsectors[0].floor_height)
+                                                new_sector->subsectors[0].floor_height = sector->subsectors[0].floor_height;
+                                            if (new_sector->subsectors[0].ceiling_height < sector->subsectors[sector->num_subsectors - 1].ceiling_height)
+                                                new_sector->subsectors[0].ceiling_height = sector->subsectors[sector->num_subsectors - 1].ceiling_height;
+
+                                            new_sector->walls[i].portal_sector = sector;
+                                            sector->walls[j].portal_sector     = new_sector;
+                                            new_sector->walls[i].portal_wall   = &sector->walls[j];
+                                            sector->walls[j].portal_wall       = &new_sector->walls[i];
+                                        }
+                                    }
+                                }
+
+                            } else if (all_inside) {
+                                // add entire sector as portals
+                                new_sector->subsectors[0].floor_height   = sector->subsectors[0].floor_height;
+                                new_sector->subsectors[0].ceiling_height = sector->subsectors[sector->num_subsectors - 1].ceiling_height;
+
+                                LW_LineDef *old_walls = sector->walls;
+                                sector->walls         = realloc(sector->walls, (sector->num_walls + new_sector->num_walls) * sizeof(*sector->walls));
+
+                                // update portals
+                                if (old_walls != sector->walls) {
+                                    for (unsigned i = 0; i < sector->num_walls; ++i) {
+                                        if (sector->walls[i].portal_wall != NULL) {
+                                            sector->walls[i].portal_wall->portal_wall = &sector->walls[i];
+                                        }
+                                    }
+                                }
+
+                                unsigned i = 0, j = sector->num_walls, k = 0;
+                                do {
+                                    new_sector->walls[i].portal_sector = sector;
+                                    new_sector->walls[i].portal_wall   = &sector->walls[j];
+
+                                    // create portal
+                                    sector->walls[j].portal_sector = new_sector;
+                                    sector->walls[j].portal_wall   = &new_sector->walls[i];
+                                    // init wall
+                                    sector->walls[j].sector   = sector;
+                                    sector->walls[j].start[0] = new_sector->walls[new_sector->walls[i].next].start[0];
+                                    sector->walls[j].start[1] = new_sector->walls[new_sector->walls[i].next].start[1];
+                                    sector->walls[j].next     = sector->num_walls + (k - 1 + new_sector->num_walls) % new_sector->num_walls;
+                                    sector->walls[j].prev     = sector->num_walls + (k + 1) % new_sector->num_walls;
+
+                                    if (k != 0) {
+                                        lw_recalcLinePlane(&sector->walls[j]);
+                                    }
+
+                                    i = new_sector->walls[i].next;
+                                    ++j;
+                                    ++k;
+                                } while (i != 0);
+
+                                // recalc first line because not enough information was available the first time
+                                lw_recalcLinePlane(&sector->walls[sector->num_walls]);
+
+                                sector->num_walls += new_sector->num_walls;
+                            } else {
+                                // TODO: clip
+                                // Weiler-Atherton
+                            }
                         }
 
+                        if (new_sector->subsectors[0].floor_height == INFINITY) new_sector->subsectors[0].floor_height = 0.0f;
+                        if (new_sector->subsectors[0].ceiling_height == -INFINITY) new_sector->subsectors[0].ceiling_height = 3.0f;
                         editor->data2d.state = StateIdle;
                     } else {
                         // TODO: Play sound

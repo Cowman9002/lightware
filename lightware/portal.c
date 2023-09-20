@@ -262,6 +262,7 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
     sector_queue_end                   = (sector_queue_end + 1) % SECTOR_QUEUE_SIZE;
 
     unsigned sector_id = 0;
+    bool first = true;
 
     while (sector_queue_start != sector_queue_end) {
         ++sector_id;
@@ -381,7 +382,7 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
                     unsigned clipped_len = 4;
 
                     // clip
-                    lw_vec3 *clipped_poly = _clipPolygon(frustum, true, clipping_list0, clipping_list1, &clipped_len);
+                    lw_vec3 *clipped_poly = _clipPolygon(frustum, first, clipping_list0, clipping_list1, &clipped_len);
 
                     if (clipped_len > 2) {
                         LW_Frustum next_frustum = lw_calcFrustumFromPoly(clipped_poly, clipped_len, cam.pos); // TODO add far plane
@@ -514,6 +515,7 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
         // }
 
         free(frustum.planes);
+        first = false;
     }
 }
 

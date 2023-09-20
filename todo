@@ -1,6 +1,6 @@
 TODAY:
 [ ] sector adding subtracts from existing sectors
-[ ] fix issue when looking at same convex sector through another sector 
+[x] fix issue when looking at same convex sector through another sector 
 
 OVERALL:
 [x] Render sector

@@ -45,7 +45,7 @@ bool editorInit(Editor *const editor) {
 
     editor->data2d.specter_select = true;
 
-    editor->data2d.zoom   = 0.08;
+    editor->data2d.zoom   = 0.10;
     editor->data2d.zoom_t = inv_logerp(MIN_ZOOM, MAX_ZOOM, editor->data2d.zoom);
 
     editor->data3d.camera.view_frustum.num_planes = 6;

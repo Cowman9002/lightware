@@ -27,6 +27,17 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
     LW_Subsector *subsector     = NULL;
     unsigned ssid               = editor->data3d.camera.subsector;
 
+    float dist_cache = 0;
+    lw_vec3 ray[2];
+    lw_vec2 ray2d[2];
+
+    // precalc ray direction
+    lw_screenPointToRay(editor->data3d.camera, editor->width, editor->height, mouse_screen_posv4, ray[0], ray[1]);
+    ray2d[1][0] = ray[1][0];
+    ray2d[1][1] = ray[1][1];
+    lw_normalize2d(ray2d[1]);
+    float cos_theta = lw_dot3d(ray[1], (lw_vec3){ ray2d[1][0], ray2d[1][1], 0.0f });
+
     if (sector != NULL) {
         subsector = &sector->subsectors[ssid];
         casting   = true;
@@ -37,16 +48,10 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
         //raycast ceiling
         lw_vec4 plane;
-        lw_vec3 ray[2];
-        lw_vec2 ray2d[2];
-        float cos_theta;
         float dist;
 
-        lw_screenPointToRay(editor->data3d.camera, editor->width, editor->height, mouse_screen_posv4, ray[0], ray[1]);
-        ray2d[0][0] = ray[0][0], ray2d[0][1] = ray[0][1];
-        ray2d[1][0] = ray[1][0], ray2d[1][1] = ray[1][1];
-        lw_normalize2d(ray2d[1]);
-        cos_theta = lw_dot3d(ray[1], (lw_vec3){ ray2d[1][0], ray2d[1][1], 0.0f });
+        ray2d[0][0] = ray[0][0];
+        ray2d[0][1] = ray[0][1];
 
         // ceiling
         plane[0] = 0.0f, plane[1] = 0.0f, plane[2] = -1.0f, plane[3] = -subsector->ceiling_height;
@@ -102,16 +107,23 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
             if (line->portal_sector != NULL) {
                 unsigned s       = lw_getSubSector(line->portal_sector, editor->data3d.intersect_point);
                 LW_Subsector *ss = &line->portal_sector->subsectors[s];
-                if (editor->data3d.intersect_point[2] >= ss->floor_height && editor->data3d.intersect_point[2] <= ss->ceiling_height) {
+                if (editor->data3d.intersect_point[2] > ss->floor_height && editor->data3d.intersect_point[2] < ss->ceiling_height) {
                     // continue casting
                     sector    = line->portal_sector;
                     subsector = ss;
                     ssid      = s;
                     casting   = true;
+
+                    // move ray origin
+                    ray[0][0] += ray[1][0] * (editor->data3d.intersect_dist + 0.003f);
+                    ray[0][1] += ray[1][1] * (editor->data3d.intersect_dist + 0.003f);
+                    ray[0][2] += ray[1][2] * (editor->data3d.intersect_dist + 0.003f);
+                    dist_cache += editor->data3d.intersect_dist;
                 }
             }
         }
     }
+    editor->data3d.intersect_dist += dist_cache;
 
     float high_lower = !lw_isKey(context, LW_KeyLCtrl) * lw_getMouseScroll(context) + (lw_isKeyDown(context, LW_KeyQ) - lw_isKeyDown(context, LW_KeyZ));
 

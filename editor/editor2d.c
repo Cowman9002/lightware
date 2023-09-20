@@ -12,14 +12,14 @@ float inv_logerp(float a, float b, float r);
 static void _input(Editor *const editor, float dt, LW_Context *const context);
 static void _recalcViewMatrices(Editor *const editor, float dt, LW_Context *const context);
 
-static bool _pointsAreEqual(lw_vec2 const a, lw_vec2 const b) {
+static bool _pointsAreEqual(lw_vec2 const a, lw_vec2 const b, float epsilon) {
     lw_vec2 difference;
     // check
     difference[0] = b[0] - a[0];
     difference[1] = b[1] - a[1];
     float sqdst   = lw_dot2d(difference, difference);
 
-    return sqdst <= AUTO_PORTAL_EPSILON * AUTO_PORTAL_EPSILON;
+    return sqdst <= epsilon * epsilon;
 }
 
 static bool _validPortalOverlap(LW_LineDef const *const line0, LW_LineDef const *const line1) {
@@ -32,13 +32,13 @@ static bool _validPortalOverlap(LW_LineDef const *const line0, LW_LineDef const 
     // difference[1] = b[1] - line0->start[1];
     // sqdst         = lw_dot2d(difference, difference);
 
-    if (!_pointsAreEqual(b, line0->start)) return false;
+    if (!_pointsAreEqual(b, line0->start, AUTO_PORTAL_EPSILON)) return false;
 
     // difference[0] = a[0] - line0->sector->walls[line0->next].start[0];
     // difference[1] = a[1] - line0->sector->walls[line0->next].start[1];
     // sqdst         = lw_dot2d(difference, difference);
 
-    return _pointsAreEqual(a, line0->sector->walls[line0->next].start);
+    return _pointsAreEqual(a, line0->sector->walls[line0->next].start, AUTO_PORTAL_EPSILON);
 }
 
 static bool _linesAreEqual(LW_LineDef const *const line0, LW_LineDef const *const line1) {
@@ -791,6 +791,311 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             } else {
                                 // TODO: clip
                                 // Weiler-Atherton
+
+                                // generate intersections
+                                // construct subject and clipper arrays
+                                // put all leaving intersections into an array
+                                // grab and mark first leaving as used
+                                // start at first leaving on clipper and walk backwards
+                                // if another intersection is found, move to the corresponding element in subject array
+                                // walk forwards until another intersection is found, then move back to clipper
+                                // repeat until back at beginning
+
+                                struct WaItem {
+                                    lw_vec2 point;
+                                    float t_val;
+                                    unsigned intersection_index;
+                                };
+
+                                struct WaIntersection {
+                                    lw_vec2 point;
+                                    float t_val, u_val;
+                                    unsigned subject_a, subject_b;
+                                    unsigned clipper_a, clipper_b;
+                                    bool entering;
+                                };
+
+
+                                unsigned buffer_size = sector->num_walls * new_sector->num_walls;
+                                // make maximum possible buffer
+                                struct WaIntersection *intersections = calloc(buffer_size, sizeof(*intersections));
+                                unsigned intersection_len            = 0;
+
+                                // set true if this line overlaps a line in the other sector
+                                bool *subject_overlap_list = calloc(sector->num_walls, sizeof(*subject_overlap_list));
+                                bool *clipper_overlap_list = calloc(new_sector->num_walls, sizeof(*clipper_overlap_list));
+
+                                {
+                                    // generate diff lists
+                                    for (unsigned i = 0; i < sector->num_walls; ++i) {
+                                        lw_vec2 line0[2] = {
+                                            { sector->walls[i].start[0], sector->walls[i].start[1] },
+                                            { sector->walls[sector->walls[i].next].start[0], sector->walls[sector->walls[i].next].start[1] },
+                                        };
+                                        lw_vec2 d0 = { line0[1][0] - line0[0][0], line0[1][1] - line0[0][1] };
+
+                                        for (unsigned j = 0; j < new_sector->num_walls; ++j) {
+                                            lw_vec2 line1[2] = {
+                                                { new_sector->walls[j].start[0], new_sector->walls[j].start[1] },
+                                                { new_sector->walls[new_sector->walls[j].next].start[0], new_sector->walls[new_sector->walls[j].next].start[1] },
+                                            };
+                                            lw_vec2 d1 = { line1[1][0] - line1[0][0], line1[1][1] - line1[0][1] };
+
+                                            // if lines are parallel and the distance of either point to the line < epsilon they overlap
+                                            if (fabsf(lw_cross2d(d0, d1)) < 0.003) {
+                                                lw_vec2 p0, p1;
+                                                lw_closestPointOnSegment(line0, line1[0], p0);
+                                                lw_closestPointOnSegment(line0, line1[1], p1);
+
+                                                if (lw_sqrDist2d(line1[0], p0) < 0.003 * 0.003 || lw_sqrDist2d(line1[1], p1) < 0.003 * 0.003) {
+                                                    subject_overlap_list[i] = true;
+                                                    clipper_overlap_list[j] = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                printf("Subject differences:\n");
+                                for (unsigned i = 0; i < sector->num_walls; ++i) {
+                                    if (!subject_overlap_list[i]) {
+                                        printf("(%f, %f) -> (%f, %f)\n",
+                                               sector->walls[i].start[0],
+                                               sector->walls[i].start[1],
+                                               sector->walls[sector->walls[i].next].start[0],
+                                               sector->walls[sector->walls[i].next].start[1]);
+                                    }
+                                }
+
+                                printf("Clipper differences:\n");
+                                for (unsigned i = 0; i < new_sector->num_walls; ++i) {
+                                    if (!clipper_overlap_list[i]) {
+                                        printf("(%f, %f) -> (%f, %f)\n",
+                                               new_sector->walls[i].start[0],
+                                               new_sector->walls[i].start[1],
+                                               new_sector->walls[new_sector->walls[i].next].start[0],
+                                               new_sector->walls[new_sector->walls[i].next].start[1]);
+                                    }
+                                }
+
+                                // generate intersections
+                                for (unsigned i = 0; i < sector->num_walls; ++i) {
+                                    lw_vec2 line0[2] = {
+                                        { sector->walls[i].start[0], sector->walls[i].start[1] },
+                                        { sector->walls[sector->walls[i].next].start[0], sector->walls[sector->walls[i].next].start[1] },
+                                    };
+
+                                    for (unsigned j = 0; j < new_sector->num_walls; ++j) {
+                                        if (subject_overlap_list[i]) {
+                                            // this line overlaps, only test against the unique lines of clipper
+                                            if (clipper_overlap_list[j]) continue;
+                                        }
+
+                                        lw_vec2 line1[2] = {
+                                            { new_sector->walls[j].start[0], new_sector->walls[j].start[1] },
+                                            { new_sector->walls[new_sector->walls[j].next].start[0], new_sector->walls[new_sector->walls[j].next].start[1] },
+                                        };
+
+                                        float t, u;
+                                        if (lw_intersectSegmentSegment(line0, line1, &t, &u)) {
+                                            intersections[intersection_len].point[0] = lerp(line0[0][0], line0[1][0], t);
+                                            intersections[intersection_len].point[1] = lerp(line0[0][1], line0[1][1], t);
+
+                                            // check that point does not already exist
+                                            for (unsigned k = 0; k < intersection_len; ++k) {
+                                                if (_pointsAreEqual(intersections[k].point, intersections[intersection_len].point, 0.003)) {
+                                                    goto _skip_adding_intersection;
+                                                }
+                                            }
+
+                                            intersections[intersection_len].t_val     = t;
+                                            intersections[intersection_len].u_val     = u;
+                                            intersections[intersection_len].clipper_a = j;
+                                            intersections[intersection_len].clipper_b = new_sector->walls[j].next;
+                                            intersections[intersection_len].subject_a = i;
+                                            intersections[intersection_len].subject_b = sector->walls[i].next;
+                                            ++intersection_len;
+
+                                        _skip_adding_intersection:
+                                        }
+                                    }
+                                }
+
+                                unsigned subject_len = 0, clipper_len = 0;
+                                struct WaItem *subject = calloc(sector->num_walls + intersection_len, sizeof(*subject));
+                                struct WaItem *clipper = calloc(new_sector->num_walls + intersection_len, sizeof(*clipper));
+
+                                {
+                                    // generate subject
+                                    unsigned i = 0;
+                                    do {
+                                        unsigned base_index                     = subject_len;
+                                        subject[subject_len].point[0]           = sector->walls[i].start[0];
+                                        subject[subject_len].point[1]           = sector->walls[i].start[1];
+                                        subject[subject_len].intersection_index = UNDEFINED;
+                                        ++subject_len;
+
+                                        // add all intersecting points
+                                        for (unsigned j = 0; j < intersection_len; ++j) {
+                                            if (_pointsAreEqual(intersections[j].point, subject[base_index].point, 0.0003f)) {
+                                                subject[base_index].intersection_index = j;
+
+                                            } else if (intersections[j].subject_a == i && intersections[j].subject_b == sector->walls[i].next) {
+                                                if (intersections[j].t_val < 0.0003f) {
+                                                    // this means vertex added was the intersection point, don't re-add it, just change to intersection
+                                                    subject[base_index].intersection_index = j;
+                                                    continue;
+                                                }
+
+                                                if (intersections[j].t_val > 0.9997f) {
+                                                    // this means the next vertex will be an intersection point
+                                                    continue;
+                                                }
+
+                                                subject[subject_len].point[0]           = intersections[j].point[0];
+                                                subject[subject_len].point[1]           = intersections[j].point[1];
+                                                subject[subject_len].intersection_index = j;
+                                                subject[subject_len].t_val              = intersections[j].t_val;
+                                                ++subject_len;
+                                            }
+                                        }
+
+                                        // sort by t
+                                        for (unsigned i = base_index + 2; i < subject_len; ++i) {
+                                            struct WaItem x = subject[i];
+                                            unsigned j      = i;
+                                            while (j > 0 && subject[j - 1].t_val > x.t_val) {
+                                                subject[j] = subject[j - 1];
+                                                --j;
+                                            }
+                                            subject[j] = x;
+                                        }
+
+                                        i = sector->walls[i].next;
+                                    } while (i != 0);
+                                }
+
+                                {
+                                    // generate clipper
+                                    unsigned i = 0;
+                                    do {
+                                        unsigned base_index                     = clipper_len;
+                                        clipper[clipper_len].point[0]           = new_sector->walls[i].start[0];
+                                        clipper[clipper_len].point[1]           = new_sector->walls[i].start[1];
+                                        clipper[clipper_len].intersection_index = UNDEFINED;
+                                        ++clipper_len;
+
+                                        // add all intersecting points
+                                        for (unsigned j = 0; j < intersection_len; ++j) {
+                                            if (_pointsAreEqual(intersections[j].point, clipper[base_index].point, 0.0003f)) {
+                                                clipper[base_index].intersection_index = j;
+
+                                            } else if (intersections[j].clipper_a == i && intersections[j].clipper_b == new_sector->walls[i].next) {
+                                                if (intersections[j].u_val < 0.0003f) {
+                                                    // this means vertex added was the intersection point, don't re-add it, just change to intersection
+                                                    clipper[base_index].intersection_index = j;
+                                                    continue;
+                                                }
+
+                                                if (intersections[j].u_val > 0.9997f) {
+                                                    // this means the next vertex will be an intersection point
+                                                    continue;
+                                                }
+
+                                                clipper[clipper_len].point[0]           = intersections[j].point[0];
+                                                clipper[clipper_len].point[1]           = intersections[j].point[1];
+                                                clipper[clipper_len].intersection_index = j;
+                                                clipper[clipper_len].t_val              = intersections[j].u_val;
+                                                ++clipper_len;
+                                            }
+                                        }
+
+                                        // sort by t
+                                        for (unsigned i = base_index + 2; i < clipper_len; ++i) {
+                                            struct WaItem x = clipper[i];
+                                            unsigned j      = i;
+                                            while (j > 0 && clipper[j - 1].t_val > x.t_val) {
+                                                clipper[j] = clipper[j - 1];
+                                                --j;
+                                            }
+                                            clipper[j] = x;
+                                        }
+
+                                        i = new_sector->walls[i].next;
+                                    } while (i != 0);
+                                }
+
+                                // printf("SUBJECT\n");
+                                // for (unsigned i = 0; i < subject_len; ++i) {
+                                //     printf("%i: (%f, %f)\n", subject[i].intersection_index, subject[i].point[0], subject[i].point[1]);
+                                // }
+
+                                // printf("CLIPPER\n");
+                                // for (unsigned i = 0; i < clipper_len; ++i) {
+                                //     printf("%i: (%f, %f)\n", clipper[i].intersection_index, clipper[i].point[0], clipper[i].point[1]);
+                                // }
+
+                                // set leaving/entering and generate leaving list
+                                // rules:
+                                //  1. a point is leaving if last point was inside
+                                //  2. a point is entering if last point was outside
+                                //  3. a point is inside if it is inside and not on an edge
+                                //  4. an intersection is inside if it is entering
+
+                                // find first intersection point in clipper where the prev point is not an intersection
+                                // go around following rules until we reach the beginning
+
+                                unsigned *leaving_list = calloc(intersection_len, sizeof(*leaving_list));
+                                unsigned num_leaving = 0;
+
+                                {
+                                    unsigned i = 0;
+                                    for (i = 1; i < clipper_len; ++i) {
+                                        // special modulo case for i == 0
+                                        unsigned j = i != 0 ? i - 1 : clipper_len - 1;
+
+                                        if (clipper[j].intersection_index == UNDEFINED && clipper[i].intersection_index != UNDEFINED) {
+                                            break; // this is the start index
+                                        }
+                                    }
+
+                                    unsigned start = i;
+                                    do {
+                                        if (clipper[i].intersection_index != UNDEFINED) {
+                                            unsigned j = i != 0 ? i - 1 : clipper_len - 1;
+                                            if (clipper[j].intersection_index == UNDEFINED) {
+                                                // point in poly
+                                                intersections[clipper[i].intersection_index].entering = !lw_pointInSector(*sector, clipper[j].point, 0.004f);
+                                            } else {
+                                                // use enter state
+                                                intersections[clipper[i].intersection_index].entering = !intersections[clipper[j].intersection_index].entering;
+                                            }
+
+                                            if(!intersections[clipper[i].intersection_index].entering) {
+                                                // add to leaving list
+                                                leaving_list[num_leaving] = clipper[i].intersection_index;
+                                                ++num_leaving;
+                                            }
+                                        }
+
+                                        i = (i + 1) % clipper_len;
+                                    } while (i != start);
+                                }
+
+                                printf("Intersections:\n");
+                                for (unsigned i = 0; i < intersection_len; ++i) {
+                                    printf("%i - t:%f u:%f (%f, %f)\n", intersections[i].entering, intersections[i].t_val, intersections[i].u_val, intersections[i].point[0], intersections[i].point[1]);
+                                }
+
+                                // Construct the new polygons!!!!!!!
+                                // TODO:
+
+                                free(leaving_list);
+                                free(subject);
+                                free(clipper);
+                                free(subject_overlap_list);
+                                free(clipper_overlap_list);
+                                free(intersections);
                             }
                         }
 

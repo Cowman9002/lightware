@@ -56,6 +56,7 @@ typedef unsigned lw_uvec3[3];
 LIGHTWARE_API float lw_dot2d(lw_vec2 a, lw_vec2 b);
 LIGHTWARE_API float lw_cross2d(lw_vec2 a, lw_vec2 b);
 LIGHTWARE_API float lw_dist2d(lw_vec2 a, lw_vec2 b);
+LIGHTWARE_API float lw_sqrDist2d(lw_vec2 a, lw_vec2 b);
 LIGHTWARE_API float lw_normalized2d(lw_vec2 a, lw_vec2 o);
 LIGHTWARE_API float lw_normalize2d(lw_vec2 a);
 LIGHTWARE_API void lw_rot2d(lw_vec2 a, float r, lw_vec2 o);
@@ -350,7 +351,7 @@ LIGHTWARE_API bool lw_pointInConvexPoly(lw_vec2 *vertices, unsigned num_vertices
 LIGHTWARE_API bool lw_intersectSegmentPlane(lw_vec3 line[2], lw_vec4 plane, float *o_t);
 LIGHTWARE_API bool lw_intersectRayPlane(lw_vec3 ray[2], lw_vec4 plane, float *o_t);
 
-LIGHTWARE_API bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t);
+LIGHTWARE_API bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t, float *o_u);
 LIGHTWARE_API bool lw_intersectSegmentLine(lw_vec2 seg[2], lw_vec2 line[2], float *o_t);
 // ray is defined as origin direction, but direction doesn't need to be normalized
 LIGHTWARE_API bool lw_intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float *o_t, float *o_u);

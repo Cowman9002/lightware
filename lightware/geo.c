@@ -149,7 +149,7 @@ bool lw_intersectRayPlane(lw_vec3 ray[2], lw_vec4 plane, float *o_t) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t) {
+bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t, float *o_u) {
     float x1, x2, x3, x4;
     float y1, y2, y3, y4;
     x1 = seg0[0][0];
@@ -176,6 +176,10 @@ bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t) {
 
     if (o_t != NULL) {
         *o_t = tn / denom;
+    }
+
+    if (o_t != NULL) {
+        *o_u = un / denom;
     }
 
     return true;
@@ -272,7 +276,7 @@ void lw_closestPointOnSegment(lw_vec2 seg[2], lw_vec2 point, lw_vec2 o_point) {
     float d = lw_dot2d(v, v);
 
     if (d == 0) {
-        // line is exists at only a single point
+        // line exists at only a single point
         o_point[0] = seg[0][0];
         o_point[1] = seg[0][1];
         return;

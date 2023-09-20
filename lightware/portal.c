@@ -84,7 +84,7 @@ LW_Frustum lw_calcFrustumFromPoly(lw_vec3 *polygon, unsigned num_verts, lw_vec3 
 
     // near plane
     lw_calcPlaneFromPoints(polygon[0], polygon[2], polygon[1], frustum.planes[0]);
-    frustum.planes[0][3] -= 0.003;
+    frustum.planes[0][3] += 0.003; // small offset the other way to prevent portals that share a corner from causing an infinite loop
 
     return frustum;
 }

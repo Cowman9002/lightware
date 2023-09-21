@@ -712,38 +712,19 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             LW_Sector *sector = &node->item;
 
                             // check if new sector is inside or outside of sector
+                            bool all_inside = true;
                             bool all_outside = true;
-                            bool all_inside  = true;
                             for (unsigned i = 0; i < new_sector->num_walls; ++i) {
-                                if (lw_pointInSector(*sector, new_sector->walls[i].start, 0.003f)) {
-                                    all_outside = false;
-                                } else {
+                                if (!lw_pointInSector(*sector, new_sector->walls[i].start, 0.003f)) {
                                     all_inside = false;
+                                } else if (lw_pointInSector(*sector, new_sector->walls[i].start, 0.0f)) {
+                                    all_outside = false;
                                 }
 
-                                if (!all_outside && !all_inside) break;
+                                if(!all_inside && !all_outside) break;
                             }
 
-                            if (all_outside) {
-                                // if outside, add portals as needed
-                                for (unsigned i = 0; i < new_sector->num_walls; ++i) {
-                                    for (unsigned j = 0; j < sector->num_walls; ++j) {
-                                        if (_validPortalOverlap(&new_sector->walls[i], &sector->walls[j])) {
-                                            // TODO: This could be somewhere else
-                                            if (new_sector->subsectors[0].floor_height > sector->subsectors[0].floor_height)
-                                                new_sector->subsectors[0].floor_height = sector->subsectors[0].floor_height;
-                                            if (new_sector->subsectors[0].ceiling_height < sector->subsectors[sector->num_subsectors - 1].ceiling_height)
-                                                new_sector->subsectors[0].ceiling_height = sector->subsectors[sector->num_subsectors - 1].ceiling_height;
-
-                                            new_sector->walls[i].portal_sector = sector;
-                                            sector->walls[j].portal_sector     = new_sector;
-                                            new_sector->walls[i].portal_wall   = &sector->walls[j];
-                                            sector->walls[j].portal_wall       = &new_sector->walls[i];
-                                        }
-                                    }
-                                }
-
-                            } else if (all_inside) {
+                            if (all_inside) {
                                 // add entire sector as portals
                                 new_sector->subsectors[0].floor_height   = sector->subsectors[0].floor_height;
                                 new_sector->subsectors[0].ceiling_height = sector->subsectors[sector->num_subsectors - 1].ceiling_height;
@@ -784,14 +765,12 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                     ++k;
                                 } while (i != 0);
 
-                                // recalc first line because not enough information was available the first time
+                                // recalc last line because not enough information was available the first time
                                 lw_recalcLinePlane(&sector->walls[sector->num_walls]);
 
                                 sector->num_walls += new_sector->num_walls;
-                            } else {
-                                // TODO: clip
-                                // Weiler-Atherton
-
+                            } else if(!all_outside) {
+                                // Weiler-Atherton clipping
                                 // generate intersections
                                 // construct subject and clipper arrays
                                 // put all leaving intersections into an array
@@ -800,6 +779,13 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                 // if another intersection is found, move to the corresponding element in subject array
                                 // walk forwards until another intersection is found, then move back to clipper
                                 // repeat until back at beginning
+
+                                if (new_sector->subsectors[0].floor_height > sector->subsectors[0].floor_height)
+                                    new_sector->subsectors[0].floor_height = sector->subsectors[0].floor_height;
+                                if (new_sector->subsectors[0].ceiling_height < sector->subsectors[sector->num_subsectors - 1].ceiling_height)
+                                    new_sector->subsectors[0].ceiling_height = sector->subsectors[sector->num_subsectors - 1].ceiling_height;
+
+                                // TODO: Save portal information
 
                                 struct WaItem {
                                     lw_vec2 point;
@@ -853,28 +839,6 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                                 }
                                             }
                                         }
-                                    }
-                                }
-
-                                printf("Subject differences:\n");
-                                for (unsigned i = 0; i < sector->num_walls; ++i) {
-                                    if (!subject_overlap_list[i]) {
-                                        printf("(%f, %f) -> (%f, %f)\n",
-                                               sector->walls[i].start[0],
-                                               sector->walls[i].start[1],
-                                               sector->walls[sector->walls[i].next].start[0],
-                                               sector->walls[sector->walls[i].next].start[1]);
-                                    }
-                                }
-
-                                printf("Clipper differences:\n");
-                                for (unsigned i = 0; i < new_sector->num_walls; ++i) {
-                                    if (!clipper_overlap_list[i]) {
-                                        printf("(%f, %f) -> (%f, %f)\n",
-                                               new_sector->walls[i].start[0],
-                                               new_sector->walls[i].start[1],
-                                               new_sector->walls[new_sector->walls[i].next].start[0],
-                                               new_sector->walls[new_sector->walls[i].next].start[1]);
                                     }
                                 }
 
@@ -1025,16 +989,6 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                     } while (i != 0);
                                 }
 
-                                // printf("SUBJECT\n");
-                                // for (unsigned i = 0; i < subject_len; ++i) {
-                                //     printf("%i: (%f, %f)\n", subject[i].intersection_index, subject[i].point[0], subject[i].point[1]);
-                                // }
-
-                                // printf("CLIPPER\n");
-                                // for (unsigned i = 0; i < clipper_len; ++i) {
-                                //     printf("%i: (%f, %f)\n", clipper[i].intersection_index, clipper[i].point[0], clipper[i].point[1]);
-                                // }
-
                                 // set leaving/entering and generate leaving list
                                 // rules:
                                 //  1. a point is leaving if last point was inside
@@ -1046,17 +1000,30 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                 // go around following rules until we reach the beginning
 
                                 unsigned *leaving_list = calloc(intersection_len, sizeof(*leaving_list));
-                                unsigned num_leaving = 0;
+                                unsigned num_leaving   = 0;
 
                                 {
                                     unsigned i = 0;
-                                    for (i = 1; i < clipper_len; ++i) {
+                                    for (; i < clipper_len; ++i) {
                                         // special modulo case for i == 0
                                         unsigned j = i != 0 ? i - 1 : clipper_len - 1;
 
                                         if (clipper[j].intersection_index == UNDEFINED && clipper[i].intersection_index != UNDEFINED) {
                                             break; // this is the start index
                                         }
+                                    }
+
+                                    if (i == clipper_len) {
+                                        // special case where all points are intersections / no intersection???
+                                        // need to solve for the first point, then the rest all works as expected
+                                        // if a point is the start of a unique line, it is enterering, otherwise it is leaving
+                                        // although overlap lists are stored in the same order as the raw array and not the same as the clipper array,
+                                        //  because we added to the clipper array starting with index 0, those two should always be the same
+                                        if(clipper[0].intersection_index != UNDEFINED) {
+                                            intersections[clipper[0].intersection_index].entering = !clipper_overlap_list[0];
+                                        }
+
+                                        i = 0;
                                     }
 
                                     unsigned start = i;
@@ -1071,7 +1038,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                                 intersections[clipper[i].intersection_index].entering = !intersections[clipper[j].intersection_index].entering;
                                             }
 
-                                            if(!intersections[clipper[i].intersection_index].entering) {
+                                            if (!intersections[clipper[i].intersection_index].entering) {
                                                 // add to leaving list
                                                 leaving_list[num_leaving] = clipper[i].intersection_index;
                                                 ++num_leaving;
@@ -1082,20 +1049,156 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                     } while (i != start);
                                 }
 
-                                printf("Intersections:\n");
-                                for (unsigned i = 0; i < intersection_len; ++i) {
-                                    printf("%i - t:%f u:%f (%f, %f)\n", intersections[i].entering, intersections[i].t_val, intersections[i].u_val, intersections[i].point[0], intersections[i].point[1]);
+                                // Construct the new polygons!!!!!!!
+
+                                // reconstruct new sector to match clipping list
+                                new_sector->num_walls = clipper_len;
+                                new_sector->walls     = realloc(new_sector->walls, new_sector->num_walls * sizeof(*new_sector->walls));
+                                for (unsigned i = new_sector->num_walls; i > 0;) {
+                                    --i;
+
+                                    new_sector->walls[i].sector        = new_sector;
+                                    new_sector->walls[i].start[0]      = clipper[i].point[0];
+                                    new_sector->walls[i].start[1]      = clipper[i].point[1];
+                                    new_sector->walls[i].next          = (i + 1) % new_sector->num_walls;
+                                    new_sector->walls[i].prev          = (i - 1 + new_sector->num_walls) % new_sector->num_walls;
+                                    new_sector->walls[i].portal_sector = NULL;
+                                    new_sector->walls[i].portal_wall   = NULL;
+
+                                    lw_recalcLinePlane(&new_sector->walls[i]);
+                                }
+                                lw_recalcLinePlane(&new_sector->walls[new_sector->num_walls - 1]);
+
+                                // while leaving list is not empty
+                                // remove item from leaving list
+                                // start at that item in clipper
+                                // walk backwards along clipper and jump to subject when reaching an intersection
+                                // walk forwards along subject, jumping when reaching an intersection
+                                // remove item from leaving list if passed over
+
+                                // required for splitting sector into multiple sectors
+                                LW_Sector *construction_sector = sector;
+
+                                while (true) {
+                                    --num_leaving;
+                                    unsigned start_intersection = leaving_list[num_leaving];
+
+                                    struct WaItem *active_list = clipper;
+                                    struct WaItem *other_list  = subject;
+                                    unsigned active_len        = clipper_len;
+                                    unsigned other_len         = subject_len;
+
+                                    unsigned i = 0;
+                                    // find start index for clipper
+                                    for (; i < active_len; ++i) {
+                                        if (active_list[i].intersection_index == start_intersection) break;
+                                    }
+
+                                    LW_LineDef *new_walls  = calloc(clipper_len + subject_len, sizeof(*new_walls));
+                                    unsigned num_new_walls = 0;
+
+                                    do {
+                                        // push point
+                                        // walk
+                                        // jump if intersection
+                                        // remove from leaving_list if needed
+
+                                        new_walls[num_new_walls].start[0]      = active_list[i].point[0];
+                                        new_walls[num_new_walls].start[1]      = active_list[i].point[1];
+                                        new_walls[num_new_walls].sector        = construction_sector;
+                                        new_walls[num_new_walls].next          = num_new_walls + 1;
+                                        new_walls[num_new_walls].prev          = num_new_walls - 1;
+                                        new_walls[num_new_walls].portal_sector = NULL;
+                                        new_walls[num_new_walls].portal_wall   = NULL;
+
+                                        ++num_new_walls;
+
+                                        if (active_list == clipper)
+                                            i = (i - 1 + active_len) % active_len;
+                                        else
+                                            i = (i + 1) % active_len;
+
+                                        if (active_list[i].intersection_index != UNDEFINED) {
+                                            unsigned index = active_list[i].intersection_index;
+                                            // remove from leaving list
+                                            for (unsigned j = 0; j < num_leaving; ++j) {
+                                                if (leaving_list[j] == index) {
+                                                    --num_leaving;
+                                                    leaving_list[j] = leaving_list[num_leaving];
+                                                }
+                                            }
+
+                                            // jump to other list
+                                            swap(struct WaItem *, active_list, other_list);
+                                            swap(unsigned, active_len, other_len);
+
+                                            // find index
+                                            for (i = 0; i < active_len; ++i) {
+                                                if (active_list[i].intersection_index == index) break;
+                                            }
+                                        }
+
+                                    } while (active_list[i].intersection_index != start_intersection);
+
+                                    // fix last and first wall prev and next
+                                    new_walls[0].prev                 = num_new_walls - 1;
+                                    new_walls[num_new_walls - 1].next = 0;
+
+                                    // finish and update sector
+                                    new_walls = realloc(new_walls, num_new_walls * sizeof(*new_walls)); // free unused memory
+                                    free(construction_sector->walls);
+                                    construction_sector->walls     = new_walls;
+                                    construction_sector->num_walls = num_new_walls;
+
+                                    for (unsigned i = 0; i < construction_sector->num_walls; ++i) {
+                                        lw_recalcLinePlane(&construction_sector->walls[i]);
+                                    }
+
+                                    if (num_leaving == 0) break;
+
+                                    // create sector for next loop
+                                    LW_Sector tmp_sector;
+
+                                    tmp_sector.num_subsectors = sector->num_subsectors;
+                                    tmp_sector.subsectors     = malloc(sector->num_subsectors * sizeof(*tmp_sector.subsectors));
+                                    memcpy(tmp_sector.subsectors, sector->subsectors, sector->num_subsectors * sizeof(*sector->subsectors));
+                                    tmp_sector.walls = NULL;
+
+                                    LW_SectorList_push_back(&editor->world.sectors, tmp_sector);
+                                    construction_sector = &editor->world.sectors.tail->item;
                                 }
 
-                                // Construct the new polygons!!!!!!!
-                                // TODO:
-
+                                // cleanup
                                 free(leaving_list);
                                 free(subject);
                                 free(clipper);
                                 free(subject_overlap_list);
                                 free(clipper_overlap_list);
                                 free(intersections);
+                            }
+                        }
+
+                        node = editor->world.sectors.head;
+                        // tail is the just added node, and if we xor with that the entire sector gets removed
+                        for (; node != editor->world.sectors.tail; node = node->next) {
+                            LW_Sector *sector = &node->item;
+
+                            // add portals
+                            for (unsigned i = 0; i < new_sector->num_walls; ++i) {
+                                for (unsigned j = 0; j < sector->num_walls; ++j) {
+                                    if (_validPortalOverlap(&new_sector->walls[i], &sector->walls[j])) {
+                                        // TODO: This could be somewhere else
+                                        if (new_sector->subsectors[0].floor_height > sector->subsectors[0].floor_height)
+                                            new_sector->subsectors[0].floor_height = sector->subsectors[0].floor_height;
+                                        if (new_sector->subsectors[0].ceiling_height < sector->subsectors[sector->num_subsectors - 1].ceiling_height)
+                                            new_sector->subsectors[0].ceiling_height = sector->subsectors[sector->num_subsectors - 1].ceiling_height;
+
+                                        new_sector->walls[i].portal_sector = sector;
+                                        sector->walls[j].portal_sector     = new_sector;
+                                        new_sector->walls[i].portal_wall   = &sector->walls[j];
+                                        sector->walls[j].portal_wall       = &new_sector->walls[i];
+                                    }
+                                }
                             }
                         }
 

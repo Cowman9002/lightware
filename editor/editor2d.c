@@ -187,6 +187,11 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                         memcpy(line, &sector->walls[sector->num_walls], sizeof(*line));
                         sector->walls[line->prev].next = index;
                         sector->walls[line->next].prev = index;
+
+                        // update portal
+                        if (line->portal_wall != NULL) {
+                            line->portal_wall->portal_wall = line;
+                        }
                     }
                 }
 
@@ -771,6 +776,54 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                 lw_recalcLinePlane(&sector->walls[sector->num_walls]);
 
                                 sector->num_walls += new_sector->num_walls;
+
+                                ///////////////////////////////////////////////////////////////////////////////////////////////
+                                
+                            } else if (all_outside && lw_pointInSector(*new_sector, sector->walls[0].start, false)) {
+                                // add sector as a hole. opposite to above
+
+                                LW_LineDef *old_walls = new_sector->walls;
+                                new_sector->walls     = realloc(new_sector->walls, (sector->num_walls + new_sector->num_walls) * sizeof(*new_sector->walls));
+
+                                // update portals
+                                if (old_walls != sector->walls) {
+                                    for (unsigned i = 0; i < sector->num_walls; ++i) {
+                                        if (sector->walls[i].portal_wall != NULL) {
+                                            sector->walls[i].portal_wall->portal_wall = &sector->walls[i];
+                                        }
+                                    }
+                                }
+
+                                unsigned i = 0, j = new_sector->num_walls, k = 0;
+                                do {
+                                    sector->walls[i].portal_sector = new_sector;
+                                    sector->walls[i].portal_wall   = &new_sector->walls[j];
+
+                                    // create portal
+                                    new_sector->walls[j].portal_sector = sector;
+                                    new_sector->walls[j].portal_wall   = &sector->walls[i];
+                                    // init wall
+                                    new_sector->walls[j].sector   = new_sector;
+                                    new_sector->walls[j].start[0] = sector->walls[sector->walls[i].next].start[0];
+                                    new_sector->walls[j].start[1] = sector->walls[sector->walls[i].next].start[1];
+                                    new_sector->walls[j].next     = new_sector->num_walls + (k - 1 + sector->num_walls) % sector->num_walls;
+                                    new_sector->walls[j].prev     = new_sector->num_walls + (k + 1) % sector->num_walls;
+
+                                    if (k != 0) {
+                                        lw_recalcLinePlane(&new_sector->walls[j]);
+                                    }
+
+                                    i = sector->walls[i].next;
+                                    ++j;
+                                    ++k;
+                                } while (i != 0);
+
+                                // recalc last line because not enough information was available the first time
+                                lw_recalcLinePlane(&new_sector->walls[new_sector->num_walls]);
+
+                                new_sector->num_walls += sector->num_walls;
+                                ///////////////////////////////////////////////////////////////////////////////////////////////
+
                             } else if (!all_outside) {
                                 // Weiler-Atherton clipping
                                 // generate intersections
@@ -786,8 +839,6 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                     new_sector->subsectors[0].floor_height = sector->subsectors[0].floor_height;
                                 if (new_sector->subsectors[0].ceiling_height < sector->subsectors[sector->num_subsectors - 1].ceiling_height)
                                     new_sector->subsectors[0].ceiling_height = sector->subsectors[sector->num_subsectors - 1].ceiling_height;
-
-                                // TODO: Save portal information
 
                                 struct WaItem {
                                     lw_vec2 point;
@@ -933,64 +984,124 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                 struct WaItem *subject = calloc(sector->num_walls + num_intersections, sizeof(*subject));
                                 struct WaItem *clipper = calloc(new_sector->num_walls + num_intersections, sizeof(*clipper));
 
+                                // linked list bc why not
+                                struct WaPoly {
+                                    struct WaItem *start;   // pointer to address in subject array
+                                    struct WaPoly *next;    // next head
+                                    unsigned len;           // number of vertices in array
+                                    bool has_intersections; // true if this polygon intersects with the clipper
+                                };
+
+                                struct WaPoly *subject_poly_list = calloc(1, sizeof(*subject_poly_list));
+                                struct WaPoly *clipper_poly_list = calloc(1, sizeof(*clipper_poly_list));
+
                                 {
                                     // generate subject
-                                    unsigned i = 0;
-                                    do {
-                                        unsigned base_index                     = subject_len;
-                                        subject[subject_len].point[0]           = sector->walls[i].start[0];
-                                        subject[subject_len].point[1]           = sector->walls[i].start[1];
-                                        subject[subject_len].intersection_index = UNDEFINED;
-                                        subject[subject_len].portal_sector      = sector->walls[i].portal_sector;
-                                        subject[subject_len].portal_wall        = sector->walls[i].portal_wall;
-                                        ++subject_len;
 
-                                        // add all intersecting points
-                                        for (unsigned j = 0; j < num_intersections; ++j) {
-                                            if (_pointsAreEqual(intersections[j].point, subject[base_index].point, 0.0003f)) {
-                                                subject[base_index].intersection_index = j;
+                                    // we need to add subpolygons(holes) as well
+                                    // these need to be separate so loops around the subject stay within their own polygon
+                                    bool *accessed_points         = calloc(sector->num_walls, sizeof(*accessed_points));
+                                    struct WaPoly *active_polygon = subject_poly_list;
 
-                                            } else if (intersections[j].subject_a == i && intersections[j].subject_b == sector->walls[i].next) {
-                                                if (intersections[j].t_val < 0.0003f) {
-                                                    // this means vertex added was the intersection point, don't re-add it, just change to intersection
+                                    unsigned i;
+                                    unsigned start = 0;
+
+                                    while (true) {
+                                        active_polygon->start = &subject[subject_len];
+                                        active_polygon->len   = subject_len;
+
+                                        // do the generation
+                                        i = start;
+                                        do {
+                                            accessed_points[i]                      = true;
+                                            unsigned base_index                     = subject_len;
+                                            subject[subject_len].point[0]           = sector->walls[i].start[0];
+                                            subject[subject_len].point[1]           = sector->walls[i].start[1];
+                                            subject[subject_len].intersection_index = UNDEFINED;
+                                            subject[subject_len].portal_sector      = sector->walls[i].portal_sector;
+                                            subject[subject_len].portal_wall        = sector->walls[i].portal_wall;
+                                            ++subject_len;
+
+                                            // add all intersecting points
+                                            for (unsigned j = 0; j < num_intersections; ++j) {
+                                                if (_pointsAreEqual(intersections[j].point, subject[base_index].point, 0.0003f)) {
                                                     subject[base_index].intersection_index = j;
-                                                    continue;
-                                                } else if (intersections[j].t_val > 0.9997f) {
-                                                    // this means the next vertex will be an intersection point
-                                                    continue;
-                                                } else if (subject[base_index].portal_sector && subject[base_index].portal_wall) {
-                                                    // remove portal because it has an intersection
-                                                    subject[base_index].portal_wall->portal_sector = NULL;
-                                                    subject[base_index].portal_wall->portal_wall   = NULL;
-                                                    subject[base_index].portal_sector              = NULL;
-                                                    subject[base_index].portal_wall                = NULL;
+                                                    active_polygon->has_intersections      = true;
+
+                                                } else if (intersections[j].subject_a == i && intersections[j].subject_b == sector->walls[i].next) {
+                                                    active_polygon->has_intersections = true;
+
+                                                    if (intersections[j].t_val < 0.0003f) {
+                                                        // this means vertex added was the intersection point, don't re-add it, just change to intersection
+                                                        subject[base_index].intersection_index = j;
+                                                        continue;
+                                                    } else if (intersections[j].t_val > 0.9997f) {
+                                                        // this means the next vertex will be an intersection point
+                                                        continue;
+                                                    } else if (subject[base_index].portal_sector && subject[base_index].portal_wall) {
+                                                        // remove portal because it has an intersection
+                                                        subject[base_index].portal_wall->portal_sector = NULL;
+                                                        subject[base_index].portal_wall->portal_wall   = NULL;
+                                                        subject[base_index].portal_sector              = NULL;
+                                                        subject[base_index].portal_wall                = NULL;
+                                                    }
+
+                                                    subject[subject_len].point[0]           = intersections[j].point[0];
+                                                    subject[subject_len].point[1]           = intersections[j].point[1];
+                                                    subject[subject_len].intersection_index = j;
+                                                    subject[subject_len].t_val              = intersections[j].t_val;
+                                                    ++subject_len;
                                                 }
-
-                                                subject[subject_len].point[0]           = intersections[j].point[0];
-                                                subject[subject_len].point[1]           = intersections[j].point[1];
-                                                subject[subject_len].intersection_index = j;
-                                                subject[subject_len].t_val              = intersections[j].t_val;
-                                                ++subject_len;
                                             }
-                                        }
 
-                                        // sort by t
-                                        for (unsigned i = base_index + 2; i < subject_len; ++i) {
-                                            struct WaItem x = subject[i];
-                                            unsigned j      = i;
-                                            while (j > 0 && subject[j - 1].t_val > x.t_val) {
-                                                subject[j] = subject[j - 1];
-                                                --j;
+                                            // sort by t
+                                            for (unsigned i = base_index + 2; i < subject_len; ++i) {
+                                                struct WaItem x = subject[i];
+                                                unsigned j      = i;
+                                                while (j > 0 && subject[j - 1].t_val > x.t_val) {
+                                                    subject[j] = subject[j - 1];
+                                                    --j;
+                                                }
+                                                subject[j] = x;
                                             }
-                                            subject[j] = x;
-                                        }
 
-                                        i = sector->walls[i].next;
-                                    } while (i != 0);
+                                            i = sector->walls[i].next;
+                                        } while (i != start);
+
+                                        active_polygon->len = subject_len - active_polygon->len;
+
+                                        // find the next start point
+                                        for (start = 0; start < sector->num_walls; ++start) {
+                                            if (!accessed_points[start]) break;
+                                        }
+                                        if (start == sector->num_walls) break;
+
+                                        // make polygon for next loop
+                                        struct WaPoly *next_poly = calloc(1, sizeof(*next_poly));
+                                        active_polygon->next     = next_poly;
+                                        active_polygon           = next_poly;
+                                    }
+
+                                    free(accessed_points);
                                 }
+
+                                // {
+                                //     unsigned j = 0;
+                                //     for (struct WaPoly *node = subject_poly_list; node != NULL; node = node->next) {
+                                //         printf("Poly#%i: %u\n", j, node->len);
+                                //         ++j;
+                                //         for (unsigned i = 0; i < node->len; ++i) {
+                                //             printf("(%f, %f)\n", node->start[i].point[0], node->start[i].point[1]);
+                                //         }
+                                //     }
+                                // }
 
                                 {
                                     // generate clipper
+                                    // this is simpler because there will only ever be one polygon
+                                    clipper_poly_list->start = &clipper[0];
+                                    clipper_poly_list->next  = NULL;
+
                                     unsigned i = 0;
                                     do {
                                         unsigned base_index                     = clipper_len;
@@ -1037,6 +1148,8 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                                         i = new_sector->walls[i].next;
                                     } while (i != 0);
+
+                                    clipper_poly_list->len = clipper_len;
                                 }
 
                                 // Construct the new polygons!!!!!!!
@@ -1069,20 +1182,26 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                 // required for splitting sector into multiple sectors
                                 LW_Sector *construction_sector = sector;
 
+                                // next will be the actual start
+                                LW_SectorListNode *start_of_new_sectors = editor->world.sectors.tail;
+
                                 while (num_leaving > 0) {
                                     --num_leaving;
                                     unsigned start_intersection = leaving_list[num_leaving];
 
-                                    struct WaItem *active_list = clipper;
-                                    struct WaItem *other_list  = subject;
-                                    unsigned active_len        = clipper_len;
-                                    unsigned other_len         = subject_len;
+                                    struct WaPoly *active_list = clipper_poly_list;
+                                    struct WaPoly *other_list  = subject_poly_list;
+                                    // unsigned active_len        = clipper_len;
+                                    // unsigned other_len         = subject_len;
 
-                                    unsigned i = 0;
+                                    unsigned i                    = 0; // in polygon space
+                                    struct WaPoly *active_polygon = clipper_poly_list;
                                     // find start index for clipper
-                                    for (; i < active_len; ++i) {
-                                        if (active_list[i].intersection_index == start_intersection) break;
+                                    for (; i < clipper_len; ++i) {
+                                        if (clipper[i].intersection_index == start_intersection) break;
                                     }
+
+                                    if (i == clipper_len) break;
 
                                     LW_LineDef *new_walls  = calloc(clipper_len + subject_len, sizeof(*new_walls));
                                     unsigned num_new_walls = 0;
@@ -1093,14 +1212,14 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                         // jump if intersection
                                         // remove from leaving_list if needed
 
-                                        new_walls[num_new_walls].start[0] = active_list[i].point[0];
-                                        new_walls[num_new_walls].start[1] = active_list[i].point[1];
+                                        new_walls[num_new_walls].start[0] = active_polygon->start[i].point[0];
+                                        new_walls[num_new_walls].start[1] = active_polygon->start[i].point[1];
                                         new_walls[num_new_walls].sector   = construction_sector;
                                         new_walls[num_new_walls].next     = num_new_walls + 1;
                                         new_walls[num_new_walls].prev     = num_new_walls - 1;
 
-                                        new_walls[num_new_walls].portal_sector = active_list[i].portal_sector;
-                                        new_walls[num_new_walls].portal_wall   = active_list[i].portal_wall;
+                                        new_walls[num_new_walls].portal_sector = active_polygon->start[i].portal_sector;
+                                        new_walls[num_new_walls].portal_wall   = active_polygon->start[i].portal_wall;
 
                                         if (new_walls[num_new_walls].portal_wall) {
                                             new_walls[num_new_walls].portal_wall->portal_wall   = &new_walls[num_new_walls];
@@ -1109,13 +1228,14 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                                         ++num_new_walls;
 
-                                        if (active_list == clipper)
-                                            i = (i - 1 + active_len) % active_len;
-                                        else
-                                            i = (i + 1) % active_len;
+                                        if (active_list->start == clipper)
+                                            i = (i - 1 + active_polygon->len) % active_polygon->len;
+                                        else {
+                                            i = (i + 1) % active_polygon->len;
+                                        }
 
-                                        if (active_list[i].intersection_index != UNDEFINED) {
-                                            unsigned index = active_list[i].intersection_index;
+                                        if (active_polygon->start[i].intersection_index != UNDEFINED) {
+                                            unsigned index = active_polygon->start[i].intersection_index;
                                             // remove from leaving list
                                             for (unsigned j = 0; j < num_leaving; ++j) {
                                                 if (leaving_list[j] == index) {
@@ -1125,16 +1245,24 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                             }
 
                                             // jump to other list
-                                            swap(struct WaItem *, active_list, other_list);
-                                            swap(unsigned, active_len, other_len);
+                                            swap(struct WaPoly *, active_list, other_list);
+                                            // swap(unsigned, active_len, other_len);
 
-                                            // find index
-                                            for (i = 0; i < active_len; ++i) {
-                                                if (active_list[i].intersection_index == index) break;
+                                            // find index and polygon
+                                            active_polygon = active_list;
+                                            for (; active_polygon != NULL; active_polygon = active_polygon->next) {
+                                                for (i = 0; i < active_polygon->len; ++i) {
+                                                    if (active_polygon->start[i].intersection_index == index) goto _new_poly_and_index_found;
+                                                }
                                             }
+
+                                            printf("Polygon not found! Recover somehow!\n");
+                                            return 1;
+
+                                        _new_poly_and_index_found:
                                         }
 
-                                    } while (active_list[i].intersection_index != start_intersection);
+                                    } while (active_polygon->start[i].intersection_index != start_intersection);
 
                                     if (num_new_walls < 3) {
                                         // dont add
@@ -1147,7 +1275,9 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                     new_walls[num_new_walls - 1].next = 0;
 
                                     // finish and update sector
-                                    new_walls = realloc(new_walls, num_new_walls * sizeof(*new_walls)); // free unused memory
+
+                                    //TODO Move this: new_walls = realloc(new_walls, num_new_walls * sizeof(*new_walls)); // free unused memory
+
                                     free(construction_sector->walls);
                                     construction_sector->walls     = new_walls;
                                     construction_sector->num_walls = num_new_walls;
@@ -1170,7 +1300,99 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                     construction_sector = &editor->world.sectors.tail->item;
                                 }
 
+                                // add unhandled holes
+                                for (struct WaPoly *node = subject_poly_list; node != NULL; node = node->next) {
+                                    // intersections should have been handled
+                                    if (node->has_intersections) continue;
+                                    // check if this is inside the clipper, if so, don't add
+                                    if (lw_pointInSector(*new_sector, node->start[0].point, false)) continue;
+
+                                    // attempt to add to start sector
+                                    if (lw_pointInSector(*sector, node->start[0].point, false)) {
+                                        unsigned sub_start = sector->num_walls;
+                                        sector->num_walls += node->len;
+
+                                        for (unsigned i = node->len; i > 0;) {
+                                            --i;
+                                            unsigned j = sub_start + i;
+
+                                            sector->walls[j].start[0] = node->start[i].point[0];
+                                            sector->walls[j].start[1] = node->start[i].point[1];
+                                            sector->walls[j].sector   = sector;
+                                            sector->walls[j].next     = j + 1;
+                                            sector->walls[j].prev     = j - 1;
+
+                                            sector->walls[j].portal_sector = node->start[i].portal_sector;
+                                            sector->walls[j].portal_wall   = node->start[i].portal_wall;
+
+                                            if (sector->walls[j].portal_wall) {
+                                                sector->walls[j].portal_wall->portal_wall   = &sector->walls[j];
+                                                sector->walls[j].portal_wall->portal_sector = sector;
+                                            }
+
+                                            lw_recalcLinePlane(&sector->walls[j]);
+                                        }
+
+                                        sector->walls[sub_start].prev             = sector->num_walls - 1;
+                                        sector->walls[sector->num_walls - 1].next = sub_start;
+                                        lw_recalcLinePlane(&sector->walls[sector->num_walls - 1]);
+
+                                        continue;
+                                    }
+
+                                    // go through each new sector and check which one to add it to
+                                    for (LW_SectorListNode *slnode = start_of_new_sectors->next; slnode != NULL; slnode = slnode->next) {
+                                        LW_Sector *new_sector_item = &slnode->item;
+
+                                        if (lw_pointInSector(*new_sector_item, node->start[0].point, false)) {
+                                            unsigned sub_start = new_sector_item->num_walls;
+                                            new_sector_item->num_walls += node->len;
+
+                                            for (unsigned i = node->len; i > 0;) {
+                                                --i;
+                                                unsigned j = sub_start + i;
+
+                                                new_sector_item->walls[j].start[0] = node->start[i].point[0];
+                                                new_sector_item->walls[j].start[1] = node->start[i].point[1];
+                                                new_sector_item->walls[j].sector   = new_sector_item;
+                                                new_sector_item->walls[j].next     = j + 1;
+                                                new_sector_item->walls[j].prev     = j - 1;
+
+                                                new_sector_item->walls[j].portal_sector = node->start[i].portal_sector;
+                                                new_sector_item->walls[j].portal_wall   = node->start[i].portal_wall;
+
+                                                if (new_sector_item->walls[j].portal_wall) {
+                                                    new_sector_item->walls[j].portal_wall->portal_wall   = &new_sector_item->walls[j];
+                                                    new_sector_item->walls[j].portal_wall->portal_sector = new_sector_item;
+                                                }
+
+                                                lw_recalcLinePlane(&new_sector_item->walls[j]);
+                                            }
+
+                                            new_sector_item->walls[sub_start].prev                      = new_sector_item->num_walls - 1;
+                                            new_sector_item->walls[new_sector_item->num_walls - 1].next = sub_start;
+                                            lw_recalcLinePlane(&new_sector_item->walls[new_sector_item->num_walls - 1]);
+
+                                            break;
+                                        }
+                                    }
+                                }
+
                                 // cleanup
+
+                                for (struct WaPoly *node = subject_poly_list; node != NULL;) {
+                                    struct WaPoly *node1 = node->next;
+                                    free(node);
+                                    node = node1;
+                                }
+
+                                // should only ever be one, but just to be sure
+                                for (struct WaPoly *node = clipper_poly_list; node != NULL;) {
+                                    struct WaPoly *node1 = node->next;
+                                    free(node);
+                                    node = node1;
+                                }
+
                                 free(leaving_list);
                                 free(subject);
                                 free(clipper);

@@ -1,6 +1,7 @@
 #include "internal.h"
 
 #include <math.h>
+#include <stdio.h>
 
 bool lw_pointInPoly(lw_vec2 *vertices, unsigned num_verts, lw_vec2 point) {
     lw_vec2 ray[2] = { { point[0], point[1] }, { -1.0f, 0.0f } };
@@ -66,6 +67,27 @@ bool lw_pointInConvexPoly(lw_vec2 *vertices, unsigned num_vertices, lw_vec2 poin
     n[1] = point[1] - a[1];
 
     if (lw_cross2d(m, n) > 0.0f) return false;
+
+    return true;
+}
+
+// https://stackoverflow.com/questions/328107/how-can-you-determine-a-point-is-between-two-other-points-on-a-line-segment
+bool lw_pointOnSegment(lw_vec2 line[2], lw_vec2 point) {
+    lw_vec2 a = { line[0][0], line[0][1] };
+    lw_vec2 b = { line[1][0], line[1][1] };
+    lw_vec2 c = { point[0], point[1] };
+
+    // cross of two lines going from a to b and from a to c
+    float cross3 = (c[1] - a[1]) * (b[0] - a[0]) - (c[0] - a[0]) * (b[1] - a[1]);
+    // check if point is on line
+    if (fabsf(cross3) > 0.003f) return false;
+
+    // dot of two lines going from a to b and from a to c
+    float dot3 = (c[0] - a[0]) * (b[0] - a[0]) + (c[1] - a[1]) * (b[1] - a[1]);
+
+    // the max dot value will be the square distance because c == b
+    if (dot3 < 0.0f) return false;
+    if (dot3 > lw_sqrDist2d(a, b)) return false;
 
     return true;
 }

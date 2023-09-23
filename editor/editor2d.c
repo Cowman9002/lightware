@@ -23,6 +23,8 @@ static bool _pointsAreEqual(lw_vec2 const a, lw_vec2 const b, float epsilon) {
 }
 
 static bool _validPortalOverlap(LW_LineDef const *const line0, LW_LineDef const *const line1) {
+    if (line1->next == UNDEFINED || line0->next == UNDEFINED) return false;
+
     lw_vec2 a, b;
     a[0] = line1->start[0], a[1] = line1->start[1];
     b[0] = line1->sector->walls[line1->next].start[0], b[1] = line1->sector->walls[line1->next].start[1];
@@ -59,6 +61,82 @@ static bool _linesAreEqual(LW_LineDef const *const line0, LW_LineDef const *cons
     sqdst         = lw_dot2d(difference, difference);
 
     return sqdst <= AUTO_PORTAL_EPSILON;
+}
+
+static void _removePoint(Editor *editor, LW_Sector *sector, unsigned index) {
+    LW_LineDef *remove = &sector->walls[index];
+
+    // remove from selection
+    for (unsigned s = 0; s < editor->data2d.selected_points_len; ++s) {
+        if (editor->data2d.selected_points[s] == remove) {
+            --editor->data2d.selected_points_len;
+            editor->data2d.selected_points[s] = editor->data2d.selected_points[editor->data2d.selected_points_len];
+            break;
+        }
+    }
+
+    // update portal
+    if (remove->portal_wall != NULL) {
+        remove->portal_wall->portal_wall   = NULL;
+        remove->portal_wall->portal_sector = NULL;
+    }
+
+    --sector->num_walls;
+    if (index < sector->num_walls) {
+        LW_LineDef *last = &sector->walls[sector->num_walls];
+        if (last->next != UNDEFINED) sector->walls[last->next].prev = index;
+        if (last->prev != UNDEFINED) sector->walls[last->prev].next = index;
+
+        // update selection
+        for (unsigned s = 0; s < editor->data2d.selected_points_len; ++s) {
+            if (editor->data2d.selected_points[s] == last) {
+                editor->data2d.selected_points[s] = remove;
+                break;
+            }
+        }
+
+        // update portal
+        if (last->portal_wall != NULL) {
+            last->portal_wall->portal_wall = remove;
+        }
+        memcpy(remove, last, sizeof(*last));
+    }
+}
+
+void _removeOverlappingWalls(Editor *editor, LW_Sector *sector) {
+    // remove walls that overlap like portals (holes)
+    for (unsigned i = 0; i < sector->num_walls;) {
+        LW_LineDef *line0 = &sector->walls[i];
+        bool incr_i       = true;
+
+        for (unsigned j = i + 1; j < sector->num_walls;) {
+            LW_LineDef *line1 = &sector->walls[j];
+            bool incr_j       = true;
+
+            if (_validPortalOverlap(line0, line1)) {
+                // update pointers
+
+                sector->walls[line0->prev].next = line1->next;
+                sector->walls[line1->next].prev = line0->prev;
+
+                sector->walls[line1->prev].next = line0->next;
+                sector->walls[line0->next].prev = line1->prev;
+
+                // remove lines
+                _removePoint(editor, sector, j);
+                incr_j = false;
+
+                // swap remove above, so if line is last index, the index will be invalid.
+                // because it is a swap remove, we know that line has been moved to j
+                _removePoint(editor, sector, i != sector->num_walls ? i : j);
+                incr_i = false;
+            }
+
+            if (incr_j) ++j;
+        }
+
+        if (incr_i) ++i;
+    }
 }
 
 int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
@@ -370,6 +448,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                     editor->data2d.selection_box.high[i]  = mouse_screen_posv4[i];
                     editor->data2d.selection_box_pivot[i] = mouse_screen_posv4[i];
                 }
+
             } else if (isInputActionDown(context, InputName_multiSelect)) {
                 // if selecting already selected point, remove point
                 LW_Circle circle;
@@ -543,6 +622,117 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                 break;
 
             } else if (isInputActionUp(context, InputName_selectPoint)) {
+                for (unsigned i = 0; i < editor->data2d.selected_points_len;) {
+                    bool do_increment = true;
+                    // remove overlapped points inside the sector
+                    LW_LineDef *line    = editor->data2d.selected_points[i];
+                    LW_Sector *sector   = line->sector;
+                    unsigned line_index = (unsigned)(((intptr_t)line - (intptr_t)line->sector->walls) / sizeof(LW_LineDef));
+
+                    // remove walls that overlap like portals (holes)
+                    for (unsigned j = sector->num_walls; j > 0;) {
+                        --j;
+                        if (j == line_index) continue;
+
+                        LW_LineDef *line1 = &sector->walls[j];
+                        if (_validPortalOverlap(line, line1)) {
+                            // update pointers
+
+                            sector->walls[line->prev].next  = line1->next;
+                            sector->walls[line1->next].prev = line->prev;
+
+                            sector->walls[line1->prev].next = line->next;
+                            sector->walls[line->next].prev  = line1->prev;
+
+                            // remove lines
+                            _removePoint(editor, sector, j);
+
+                            // swap remove above, so if line is last index, the index will be invalid.
+                            // because it is a swap remove, we know that line has been moved to j
+                            _removePoint(editor, sector, line_index != sector->num_walls ? line_index : j);
+
+                            // because we also swap remove from the selection, we need to not increment i
+                            do_increment = false;
+                        }
+                    }
+
+                    // remove overlapping neighbor points
+                    for (unsigned j = line->sector->num_walls; j > 0;) {
+                        --j;
+
+                        if (j == line_index) continue;
+                        if (j != line->next && j != line->prev) continue;
+                        LW_LineDef *line2 = &sector->walls[j];
+
+                        if (_pointsAreEqual(line->start, line2->start, 0.003f)) {
+
+                            // early out and remove sector
+                            if (sector->num_walls <= 3) {
+                                // remove all selected points from that sector
+                                for (unsigned n = editor->data2d.selected_points_len; n > 0;) {
+                                    --n;
+
+                                    LW_LineDef *jline = editor->data2d.selected_points[n];
+                                    if (jline->sector == sector) {
+                                        // swap remove
+                                        --editor->data2d.selected_points_len;
+                                        editor->data2d.selected_points[n] = editor->data2d.selected_points[editor->data2d.selected_points_len];
+                                    }
+                                }
+
+                                // unset portals
+                                for (unsigned n = 0; n < sector->num_walls; ++n) {
+                                    if (sector->walls[n].portal_wall != NULL) {
+                                        sector->walls[n].portal_wall->portal_sector = NULL;
+                                        sector->walls[n].portal_wall->portal_wall   = NULL;
+                                    }
+                                }
+
+                                // remove sector
+                                LW_SectorList_remove(&editor->world.sectors, sector);
+                                goto _next_selected_point;
+                            }
+
+                            // attatch to overlapping point
+
+                            if (line2->next == line_index) {
+                                // remove portal
+                                if (line2->portal_wall != NULL) {
+                                    line2->portal_wall->portal_sector = NULL;
+                                    line2->portal_wall->portal_wall   = NULL;
+                                    line2->portal_sector              = NULL;
+                                    line2->portal_wall                = NULL;
+                                }
+                                sector->walls[line2->prev].next = line_index;
+                                line->prev                      = line2->prev;
+                            } else {
+                                // line->next = line2
+
+                                // add portal
+                                if (line2->portal_wall != NULL) {
+                                    line->portal_sector            = line2->portal_sector;
+                                    line->portal_wall              = line2->portal_wall;
+                                    line->portal_wall->portal_wall = line;
+                                }
+
+                                sector->walls[line2->next].prev = line_index;
+                                line->next                      = line2->next;
+                            }
+
+                            lw_recalcLinePlane(line);
+
+                            line2->prev = UNDEFINED;
+                            line2->next = UNDEFINED;
+
+                            // remove overlapped point
+                            _removePoint(editor, sector, j);
+                        }
+                    }
+
+                _next_selected_point:
+                    if (do_increment) ++i;
+                }
+
                 for (unsigned i = 0; i < editor->data2d.selected_points_len; ++i) {
                     // If moving portal, check if portal should be disconnected
                     // recalc line plane
@@ -559,19 +749,20 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                     }
                     lw_recalcLinePlane(line);
 
-                    line = &line->sector->walls[line->prev];
-                    if (line->portal_wall != NULL) {
-                        if (!_validPortalOverlap(line->portal_wall, line)) {
-                            // remove portal
-                            line->portal_wall->portal_wall   = NULL;
-                            line->portal_wall->portal_sector = NULL;
-                            line->portal_wall                = NULL;
-                            line->portal_sector              = NULL;
+                    if (line->prev != UNDEFINED) {
+                        line = &line->sector->walls[line->prev];
+                        if (line->portal_wall != NULL) {
+                            if (!_validPortalOverlap(line->portal_wall, line)) {
+                                // remove portal
+                                line->portal_wall->portal_wall   = NULL;
+                                line->portal_wall->portal_sector = NULL;
+                                line->portal_wall                = NULL;
+                                line->portal_sector              = NULL;
+                            }
                         }
+                        lw_recalcLinePlane(line);
                     }
-                    lw_recalcLinePlane(line);
                 }
-
 
                 editor->data2d.state = StateIdle;
                 break;
@@ -722,18 +913,21 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             for (unsigned i = 0; i < new_sector->num_walls; ++i) {
                                 if (!lw_pointInSector(*sector, new_sector->walls[i].start, true)) {
                                     all_inside = false;
-                                } else {
+                                } else if (lw_pointInSector(*sector, new_sector->walls[i].start, false)) {
                                     all_outside = false;
                                 }
 
                                 if (!all_inside && !all_outside) break;
                             }
 
+                            printf("Outside: %i, inside: %i\n", all_outside, all_inside);
+
                             if (all_inside) {
                                 // add entire sector as portals
                                 new_sector->subsectors[0].floor_height   = sector->subsectors[0].floor_height;
                                 new_sector->subsectors[0].ceiling_height = sector->subsectors[sector->num_subsectors - 1].ceiling_height;
 
+                                unsigned add_index    = sector->num_walls;
                                 LW_LineDef *old_walls = sector->walls;
                                 sector->walls         = realloc(sector->walls, (sector->num_walls + new_sector->num_walls) * sizeof(*sector->walls));
 
@@ -746,34 +940,30 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                     }
                                 }
 
-                                unsigned i = 0, j = sector->num_walls, k = 0;
+                                unsigned i       = 0;
+                                unsigned new_len = add_index;
                                 do {
-                                    new_sector->walls[i].portal_sector = sector;
-                                    new_sector->walls[i].portal_wall   = &sector->walls[j];
+                                    sector->walls[new_len].start[0]      = new_sector->walls[i].start[0];
+                                    sector->walls[new_len].start[1]      = new_sector->walls[i].start[1];
+                                    sector->walls[new_len].next          = new_len + 1;
+                                    sector->walls[new_len].prev          = new_len - 1;
+                                    sector->walls[new_len].sector        = sector;
+                                    sector->walls[new_len].portal_sector = NULL;
+                                    sector->walls[new_len].portal_wall   = NULL;
 
-                                    // create portal
-                                    sector->walls[j].portal_sector = new_sector;
-                                    sector->walls[j].portal_wall   = &new_sector->walls[i];
-                                    // init wall
-                                    sector->walls[j].sector   = sector;
-                                    sector->walls[j].start[0] = new_sector->walls[new_sector->walls[i].next].start[0];
-                                    sector->walls[j].start[1] = new_sector->walls[new_sector->walls[i].next].start[1];
-                                    sector->walls[j].next     = sector->num_walls + (k - 1 + new_sector->num_walls) % new_sector->num_walls;
-                                    sector->walls[j].prev     = sector->num_walls + (k + 1) % new_sector->num_walls;
-
-                                    if (k != 0) {
-                                        lw_recalcLinePlane(&sector->walls[j]);
-                                    }
-
-                                    i = new_sector->walls[i].next;
-                                    ++j;
-                                    ++k;
+                                    ++new_len;
+                                    i = new_sector->walls[i].prev;
                                 } while (i != 0);
 
-                                // recalc last line because not enough information was available the first time
-                                lw_recalcLinePlane(&sector->walls[sector->num_walls]);
+                                sector->walls[add_index].prev   = new_len - 1;
+                                sector->walls[new_len - 1].next = add_index;
+                                sector->num_walls               = new_len;
 
-                                sector->num_walls += new_sector->num_walls;
+                                for (unsigned i = add_index; i < new_len; ++i) {
+                                    lw_recalcLinePlane(&sector->walls[i]);
+                                }
+
+                                _removeOverlappingWalls(editor, sector);
 
                                 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -781,11 +971,11 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                 // add sector as a hole. opposite to above
 
                                 // if all are portals, this is an internal sector
-                                 for(unsigned i = 0; i < sector->num_walls; ++i) {
-                                    if(sector->walls[i].portal_sector == NULL) goto _not_an_internal_sector;
+                                for (unsigned i = 0; i < sector->num_walls; ++i) {
+                                    if (sector->walls[i].portal_sector == NULL) goto _not_an_internal_sector;
                                 }
                                 continue;
-                                _not_an_internal_sector:
+                            _not_an_internal_sector:
 
                                 LW_LineDef *old_walls = new_sector->walls;
                                 unsigned add_index    = new_sector->num_walls;
@@ -806,9 +996,9 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                                 // find the furthest point
                                 float most_left = INFINITY;
-                                for(unsigned i = 0; i < sector->num_walls; ++i) {
-                                    if(sector->walls[i].start[0] < most_left) {
-                                        start = i;
+                                for (unsigned i = 0; i < sector->num_walls; ++i) {
+                                    if (sector->walls[i].start[0] < most_left) {
+                                        start     = i;
                                         most_left = sector->walls[i].start[0];
                                     }
                                 }
@@ -816,11 +1006,11 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                 unsigned i       = start;
                                 unsigned new_len = add_index;
                                 do {
-                                    new_sector->walls[new_len].start[0] = sector->walls[i].start[0];
-                                    new_sector->walls[new_len].start[1] = sector->walls[i].start[1];
-                                    new_sector->walls[new_len].next     = new_len + 1;
-                                    new_sector->walls[new_len].prev     = new_len - 1;
-                                    new_sector->walls[new_len].sector   = new_sector;
+                                    new_sector->walls[new_len].start[0]      = sector->walls[i].start[0];
+                                    new_sector->walls[new_len].start[1]      = sector->walls[i].start[1];
+                                    new_sector->walls[new_len].next          = new_len + 1;
+                                    new_sector->walls[new_len].prev          = new_len - 1;
+                                    new_sector->walls[new_len].sector        = new_sector;
                                     new_sector->walls[new_len].portal_sector = NULL;
                                     new_sector->walls[new_len].portal_wall   = NULL;
 
@@ -830,12 +1020,14 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                                 new_sector->walls[add_index].prev   = new_len - 1;
                                 new_sector->walls[new_len - 1].next = add_index;
+                                new_sector->num_walls = new_len;
 
                                 for (unsigned i = add_index; i < new_len; ++i) {
                                     lw_recalcLinePlane(&new_sector->walls[i]);
                                 }
 
-                                new_sector->num_walls = new_len;
+
+                                _removeOverlappingWalls(editor, new_sector);
 
                                 ///////////////////////////////////////////////////////////////////////////////////////////////
                             }
@@ -849,7 +1041,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             // add portals
                             for (unsigned i = 0; i < new_sector->num_walls; ++i) {
                                 for (unsigned j = 0; j < sector->num_walls; ++j) {
-                                    if(sector->walls[j].portal_sector != NULL) continue;
+                                    if (sector->walls[j].portal_sector != NULL) continue;
 
                                     if (_validPortalOverlap(&new_sector->walls[i], &sector->walls[j])) {
                                         // TODO: This could be somewhere else

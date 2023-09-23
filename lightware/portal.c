@@ -125,6 +125,8 @@ void lw_screenPointToRay(LW_Camera cam, int width, int height, lw_vec2 point, lw
 
 void lw_recalcLinePlane(LW_LineDef *const linedef) {
     LW_Sector *const sector = linedef->sector;
+    if(linedef->next >= sector->num_walls) return;
+
     lw_vec2 p0 = { 0 }, p1 = { 0 };
 
     p0[0] = linedef->start[0];

@@ -720,11 +720,9 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             bool all_inside  = true;
                             bool all_outside = true;
                             for (unsigned i = 0; i < new_sector->num_walls; ++i) {
-                                if (!lw_pointInSector(*sector, new_sector->walls[i].start, false)) {
+                                if (!lw_pointInSector(*sector, new_sector->walls[i].start, true)) {
                                     all_inside = false;
-                                }
-
-                                if (lw_pointInSector(*sector, new_sector->walls[i].start, true)) {
+                                } else {
                                     all_outside = false;
                                 }
 
@@ -778,625 +776,68 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                 sector->num_walls += new_sector->num_walls;
 
                                 ///////////////////////////////////////////////////////////////////////////////////////////////
-                                
-                            } else if (all_outside && lw_pointInSector(*new_sector, sector->walls[0].start, false)) {
+
+                            } else if (all_outside && lw_pointInSector(*new_sector, sector->walls[0].start, true)) {
                                 // add sector as a hole. opposite to above
 
+                                // if all are portals, this is an internal sector
+                                 for(unsigned i = 0; i < sector->num_walls; ++i) {
+                                    if(sector->walls[i].portal_sector == NULL) goto _not_an_internal_sector;
+                                }
+                                continue;
+                                _not_an_internal_sector:
+
                                 LW_LineDef *old_walls = new_sector->walls;
-                                new_sector->walls     = realloc(new_sector->walls, (sector->num_walls + new_sector->num_walls) * sizeof(*new_sector->walls));
+                                unsigned add_index    = new_sector->num_walls;
+
+                                // make room
+                                new_sector->walls = realloc(new_sector->walls, (sector->num_walls + new_sector->num_walls) * sizeof(*new_sector->walls));
 
                                 // update portals
-                                if (old_walls != sector->walls) {
-                                    for (unsigned i = 0; i < sector->num_walls; ++i) {
-                                        if (sector->walls[i].portal_wall != NULL) {
-                                            sector->walls[i].portal_wall->portal_wall = &sector->walls[i];
+                                if (old_walls != new_sector->walls) {
+                                    for (unsigned i = 0; i < new_sector->num_walls; ++i) {
+                                        if (new_sector->walls[i].portal_wall != NULL) {
+                                            new_sector->walls[i].portal_wall->portal_wall = &new_sector->walls[i];
                                         }
                                     }
                                 }
 
-                                unsigned i = 0, j = new_sector->num_walls, k = 0;
+                                unsigned start = 0;
+
+                                // find the furthest point
+                                float most_left = INFINITY;
+                                for(unsigned i = 0; i < sector->num_walls; ++i) {
+                                    if(sector->walls[i].start[0] < most_left) {
+                                        start = i;
+                                        most_left = sector->walls[i].start[0];
+                                    }
+                                }
+
+                                unsigned i       = start;
+                                unsigned new_len = add_index;
                                 do {
-                                    sector->walls[i].portal_sector = new_sector;
-                                    sector->walls[i].portal_wall   = &new_sector->walls[j];
+                                    new_sector->walls[new_len].start[0] = sector->walls[i].start[0];
+                                    new_sector->walls[new_len].start[1] = sector->walls[i].start[1];
+                                    new_sector->walls[new_len].next     = new_len + 1;
+                                    new_sector->walls[new_len].prev     = new_len - 1;
+                                    new_sector->walls[new_len].sector   = new_sector;
+                                    new_sector->walls[new_len].portal_sector = NULL;
+                                    new_sector->walls[new_len].portal_wall   = NULL;
 
-                                    // create portal
-                                    new_sector->walls[j].portal_sector = sector;
-                                    new_sector->walls[j].portal_wall   = &sector->walls[i];
-                                    // init wall
-                                    new_sector->walls[j].sector   = new_sector;
-                                    new_sector->walls[j].start[0] = sector->walls[sector->walls[i].next].start[0];
-                                    new_sector->walls[j].start[1] = sector->walls[sector->walls[i].next].start[1];
-                                    new_sector->walls[j].next     = new_sector->num_walls + (k - 1 + sector->num_walls) % sector->num_walls;
-                                    new_sector->walls[j].prev     = new_sector->num_walls + (k + 1) % sector->num_walls;
+                                    ++new_len;
+                                    i = sector->walls[i].prev;
+                                } while (i != start);
 
-                                    if (k != 0) {
-                                        lw_recalcLinePlane(&new_sector->walls[j]);
-                                    }
+                                new_sector->walls[add_index].prev   = new_len - 1;
+                                new_sector->walls[new_len - 1].next = add_index;
 
-                                    i = sector->walls[i].next;
-                                    ++j;
-                                    ++k;
-                                } while (i != 0);
-
-                                // recalc last line because not enough information was available the first time
-                                lw_recalcLinePlane(&new_sector->walls[new_sector->num_walls]);
-
-                                new_sector->num_walls += sector->num_walls;
-                                ///////////////////////////////////////////////////////////////////////////////////////////////
-
-                            } else if (!all_outside) {
-                                // Weiler-Atherton clipping
-                                // generate intersections
-                                // construct subject and clipper arrays
-                                // put all leaving intersections into an array
-                                // grab and mark first leaving as used
-                                // start at first leaving on clipper and walk backwards
-                                // if another intersection is found, move to the corresponding element in subject array
-                                // walk forwards until another intersection is found, then move back to clipper
-                                // repeat until back at beginning
-
-                                if (new_sector->subsectors[0].floor_height > sector->subsectors[0].floor_height)
-                                    new_sector->subsectors[0].floor_height = sector->subsectors[0].floor_height;
-                                if (new_sector->subsectors[0].ceiling_height < sector->subsectors[sector->num_subsectors - 1].ceiling_height)
-                                    new_sector->subsectors[0].ceiling_height = sector->subsectors[sector->num_subsectors - 1].ceiling_height;
-
-                                struct WaItem {
-                                    lw_vec2 point;
-                                    float t_val;
-                                    unsigned intersection_index;
-                                    LW_Sector *portal_sector;
-                                    LW_LineDef *portal_wall;
-                                };
-
-                                struct WaIntersection {
-                                    lw_vec2 point;
-                                    float t_val, u_val;
-                                    unsigned subject_a, subject_b;
-                                    unsigned clipper_a, clipper_b;
-                                    bool entering;
-                                };
-
-
-                                unsigned buffer_size = sector->num_walls * new_sector->num_walls;
-                                // make maximum possible buffer
-                                struct WaIntersection *intersections = calloc(buffer_size, sizeof(*intersections));
-                                unsigned num_intersections           = 0;
-
-                                unsigned *leaving_list = calloc(num_intersections, sizeof(*leaving_list));
-                                unsigned num_leaving   = 0;
-
-                                // generate intersections
-                                for (unsigned i = 0; i < sector->num_walls; ++i) {
-                                    lw_vec2 line0[2] = {
-                                        { sector->walls[i].start[0], sector->walls[i].start[1] },
-                                        { sector->walls[sector->walls[i].next].start[0], sector->walls[sector->walls[i].next].start[1] },
-                                    };
-                                    lw_vec2 d0 = { line0[1][0] - line0[0][0], line0[1][1] - line0[0][1] };
-                                    lw_normalize2d(d0);
-
-                                    for (unsigned j = 0; j < new_sector->num_walls; ++j) {
-                                        // if (subject_overlap_list[i]) {
-                                        //     // this line overlaps, only test against the unique lines of clipper
-                                        //     if (clipper_overlap_list[j]) continue;
-                                        // }
-
-                                        lw_vec2 line1[2] = {
-                                            { new_sector->walls[j].start[0], new_sector->walls[j].start[1] },
-                                            { new_sector->walls[new_sector->walls[j].next].start[0], new_sector->walls[new_sector->walls[j].next].start[1] },
-                                        };
-                                        lw_vec2 d1 = { line1[1][0] - line1[0][0], line1[1][1] - line1[0][1] };
-                                        lw_normalize2d(d1);
-
-                                        float t, u;
-                                        if (lw_intersectSegmentSegment(line0, line1, &t, &u)) {
-                                            intersections[num_intersections].point[0] = lerp(line0[0][0], line0[1][0], t);
-                                            intersections[num_intersections].point[1] = lerp(line0[0][1], line0[1][1], t);
-                                            float cross                               = lw_cross2d(d0, d1);
-                                            bool entering                             = cross >= 0.0f;
-
-                                            // check that point does not already exist
-                                            for (unsigned k = 0; k < num_intersections; ++k) {
-                                                if (_pointsAreEqual(intersections[k].point, intersections[num_intersections].point, 0.003)) {
-                                                    // // entering takes precedence
-                                                    // if(entering) intersections[k].entering = true;
-                                                    // leaving takes precedence
-                                                    if (!entering) intersections[k].entering = false;
-
-                                                    goto _skip_adding_intersection;
-                                                }
-                                            }
-
-                                            intersections[num_intersections].t_val     = t;
-                                            intersections[num_intersections].u_val     = u;
-                                            intersections[num_intersections].clipper_a = j;
-                                            intersections[num_intersections].clipper_b = new_sector->walls[j].next;
-                                            intersections[num_intersections].subject_a = i;
-                                            intersections[num_intersections].subject_b = sector->walls[i].next;
-                                            intersections[num_intersections].entering  = entering;
-
-                                            ++num_intersections;
-
-                                        _skip_adding_intersection:
-                                        }
-                                    }
-                                }
-
-                                // remove intersections that are actually just overlapping points
-                                for (unsigned i = num_intersections; i > 0;) {
-                                    --i;
-
-                                    if (!((intersections[i].t_val <= 0.0003f && intersections[i].u_val >= 0.9997f) ||
-                                          (intersections[i].u_val <= 0.0003f && intersections[i].t_val >= 0.9997f))) {
-                                        continue;
-                                    }
-
-                                    // match the corner. The direction should be the same ie. prev == prev and next == next direction
-                                    lw_vec2 sub_prev, sub_next, clip_prev, clip_next;
-                                    unsigned subject_start, clipper_start;
-
-                                    // get the matching vertex for both clipper and subject
-                                    if (intersections[i].t_val <= 0.0003f) {
-                                        subject_start = intersections[i].subject_a;
-                                        clipper_start = intersections[i].clipper_b;
-                                    } else {
-                                        subject_start = intersections[i].subject_b;
-                                        clipper_start = intersections[i].clipper_a;
-                                    }
-
-                                    // generate the direction vectors
-                                    sub_prev[0] = sector->walls[sector->walls[subject_start].prev].start[0] - sector->walls[subject_start].start[0];
-                                    sub_prev[1] = sector->walls[sector->walls[subject_start].prev].start[1] - sector->walls[subject_start].start[1];
-                                    sub_next[0] = sector->walls[sector->walls[subject_start].next].start[0] - sector->walls[subject_start].start[0];
-                                    sub_next[1] = sector->walls[sector->walls[subject_start].next].start[1] - sector->walls[subject_start].start[1];
-
-                                    clip_prev[0] = new_sector->walls[new_sector->walls[clipper_start].prev].start[0] - new_sector->walls[clipper_start].start[0];
-                                    clip_prev[1] = new_sector->walls[new_sector->walls[clipper_start].prev].start[1] - new_sector->walls[clipper_start].start[1];
-                                    clip_next[0] = new_sector->walls[new_sector->walls[clipper_start].next].start[0] - new_sector->walls[clipper_start].start[0];
-                                    clip_next[1] = new_sector->walls[new_sector->walls[clipper_start].next].start[1] - new_sector->walls[clipper_start].start[1];
-
-                                    lw_normalize2d(sub_prev);
-                                    lw_normalize2d(sub_next);
-                                    lw_normalize2d(clip_prev);
-                                    lw_normalize2d(clip_next);
-
-                                    // check dot products
-                                    float d0 = lw_dot2d(sub_prev, clip_prev);
-                                    float d1 = lw_dot2d(sub_next, clip_next);
-
-                                    if (d0 > 0.9997f && d1 > 0.9997f) {
-                                        // remove
-                                        --num_intersections;
-                                        intersections[i] = intersections[num_intersections];
-                                    }
-                                }
-
-                                // add to leaving list
-                                // printf("Intersections\n");
-                                for (unsigned i = 0; i < num_intersections; ++i) {
-                                    if (!intersections[i].entering) {
-                                        leaving_list[num_leaving] = i;
-                                        ++num_leaving;
-                                    }
-                                    // printf("%i %f %f| %f, %f\n", intersections[i].entering, intersections[i].t_val, intersections[i].u_val, intersections[i].point[0], intersections[i].point[1]);
-                                }
-
-                                unsigned subject_len = 0, clipper_len = 0;
-                                struct WaItem *subject = calloc(sector->num_walls + num_intersections, sizeof(*subject));
-                                struct WaItem *clipper = calloc(new_sector->num_walls + num_intersections, sizeof(*clipper));
-
-                                // linked list bc why not
-                                struct WaPoly {
-                                    struct WaItem *start;   // pointer to address in subject array
-                                    struct WaPoly *next;    // next head
-                                    unsigned len;           // number of vertices in array
-                                    bool has_intersections; // true if this polygon intersects with the clipper
-                                };
-
-                                struct WaPoly *subject_poly_list = calloc(1, sizeof(*subject_poly_list));
-                                struct WaPoly *clipper_poly_list = calloc(1, sizeof(*clipper_poly_list));
-
-                                {
-                                    // generate subject
-
-                                    // we need to add subpolygons(holes) as well
-                                    // these need to be separate so loops around the subject stay within their own polygon
-                                    bool *accessed_points         = calloc(sector->num_walls, sizeof(*accessed_points));
-                                    struct WaPoly *active_polygon = subject_poly_list;
-
-                                    unsigned i;
-                                    unsigned start = 0;
-
-                                    while (true) {
-                                        active_polygon->start = &subject[subject_len];
-                                        active_polygon->len   = subject_len;
-
-                                        // do the generation
-                                        i = start;
-                                        do {
-                                            accessed_points[i]                      = true;
-                                            unsigned base_index                     = subject_len;
-                                            subject[subject_len].point[0]           = sector->walls[i].start[0];
-                                            subject[subject_len].point[1]           = sector->walls[i].start[1];
-                                            subject[subject_len].intersection_index = UNDEFINED;
-                                            subject[subject_len].portal_sector      = sector->walls[i].portal_sector;
-                                            subject[subject_len].portal_wall        = sector->walls[i].portal_wall;
-                                            ++subject_len;
-
-                                            // add all intersecting points
-                                            for (unsigned j = 0; j < num_intersections; ++j) {
-                                                if (_pointsAreEqual(intersections[j].point, subject[base_index].point, 0.0003f)) {
-                                                    subject[base_index].intersection_index = j;
-                                                    active_polygon->has_intersections      = true;
-
-                                                } else if (intersections[j].subject_a == i && intersections[j].subject_b == sector->walls[i].next) {
-                                                    active_polygon->has_intersections = true;
-
-                                                    if (intersections[j].t_val < 0.0003f) {
-                                                        // this means vertex added was the intersection point, don't re-add it, just change to intersection
-                                                        subject[base_index].intersection_index = j;
-                                                        continue;
-                                                    } else if (intersections[j].t_val > 0.9997f) {
-                                                        // this means the next vertex will be an intersection point
-                                                        continue;
-                                                    } else if (subject[base_index].portal_sector && subject[base_index].portal_wall) {
-                                                        // remove portal because it has an intersection
-                                                        subject[base_index].portal_wall->portal_sector = NULL;
-                                                        subject[base_index].portal_wall->portal_wall   = NULL;
-                                                        subject[base_index].portal_sector              = NULL;
-                                                        subject[base_index].portal_wall                = NULL;
-                                                    }
-
-                                                    subject[subject_len].point[0]           = intersections[j].point[0];
-                                                    subject[subject_len].point[1]           = intersections[j].point[1];
-                                                    subject[subject_len].intersection_index = j;
-                                                    subject[subject_len].t_val              = intersections[j].t_val;
-                                                    ++subject_len;
-                                                }
-                                            }
-
-                                            // sort by t
-                                            for (unsigned i = base_index + 2; i < subject_len; ++i) {
-                                                struct WaItem x = subject[i];
-                                                unsigned j      = i;
-                                                while (j > 0 && subject[j - 1].t_val > x.t_val) {
-                                                    subject[j] = subject[j - 1];
-                                                    --j;
-                                                }
-                                                subject[j] = x;
-                                            }
-
-                                            i = sector->walls[i].next;
-                                        } while (i != start);
-
-                                        active_polygon->len = subject_len - active_polygon->len;
-
-                                        // find the next start point
-                                        for (start = 0; start < sector->num_walls; ++start) {
-                                            if (!accessed_points[start]) break;
-                                        }
-                                        if (start == sector->num_walls) break;
-
-                                        // make polygon for next loop
-                                        struct WaPoly *next_poly = calloc(1, sizeof(*next_poly));
-                                        active_polygon->next     = next_poly;
-                                        active_polygon           = next_poly;
-                                    }
-
-                                    free(accessed_points);
-                                }
-
-                                // {
-                                //     unsigned j = 0;
-                                //     for (struct WaPoly *node = subject_poly_list; node != NULL; node = node->next) {
-                                //         printf("Poly#%i: %u\n", j, node->len);
-                                //         ++j;
-                                //         for (unsigned i = 0; i < node->len; ++i) {
-                                //             printf("(%f, %f)\n", node->start[i].point[0], node->start[i].point[1]);
-                                //         }
-                                //     }
-                                // }
-
-                                {
-                                    // generate clipper
-                                    // this is simpler because there will only ever be one polygon
-                                    clipper_poly_list->start = &clipper[0];
-                                    clipper_poly_list->next  = NULL;
-
-                                    unsigned i = 0;
-                                    do {
-                                        unsigned base_index                     = clipper_len;
-                                        clipper[clipper_len].point[0]           = new_sector->walls[i].start[0];
-                                        clipper[clipper_len].point[1]           = new_sector->walls[i].start[1];
-                                        clipper[clipper_len].intersection_index = UNDEFINED;
-                                        ++clipper_len;
-
-                                        // add all intersecting points
-                                        for (unsigned j = 0; j < num_intersections; ++j) {
-                                            if (_pointsAreEqual(intersections[j].point, clipper[base_index].point, 0.0003f)) {
-                                                clipper[base_index].intersection_index = j;
-
-                                            } else if (intersections[j].clipper_a == i && intersections[j].clipper_b == new_sector->walls[i].next) {
-                                                if (intersections[j].u_val < 0.0003f) {
-                                                    // this means vertex added was the intersection point, don't re-add it, just change to intersection
-                                                    clipper[base_index].intersection_index = j;
-                                                    continue;
-                                                }
-
-                                                if (intersections[j].u_val > 0.9997f) {
-                                                    // this means the next vertex will be an intersection point
-                                                    continue;
-                                                }
-
-                                                clipper[clipper_len].point[0]           = intersections[j].point[0];
-                                                clipper[clipper_len].point[1]           = intersections[j].point[1];
-                                                clipper[clipper_len].intersection_index = j;
-                                                clipper[clipper_len].t_val              = intersections[j].u_val;
-                                                ++clipper_len;
-                                            }
-                                        }
-
-                                        // sort by t
-                                        for (unsigned i = base_index + 2; i < clipper_len; ++i) {
-                                            struct WaItem x = clipper[i];
-                                            unsigned j      = i;
-                                            while (j > 0 && clipper[j - 1].t_val > x.t_val) {
-                                                clipper[j] = clipper[j - 1];
-                                                --j;
-                                            }
-                                            clipper[j] = x;
-                                        }
-
-                                        i = new_sector->walls[i].next;
-                                    } while (i != 0);
-
-                                    clipper_poly_list->len = clipper_len;
-                                }
-
-                                // Construct the new polygons!!!!!!!
-
-                                // reconstruct new sector to match clipping list
-                                new_sector->num_walls = clipper_len;
-                                new_sector->walls     = realloc(new_sector->walls, new_sector->num_walls * sizeof(*new_sector->walls));
-                                for (unsigned i = new_sector->num_walls; i > 0;) {
-                                    --i;
-
-                                    new_sector->walls[i].sector        = new_sector;
-                                    new_sector->walls[i].start[0]      = clipper[i].point[0];
-                                    new_sector->walls[i].start[1]      = clipper[i].point[1];
-                                    new_sector->walls[i].next          = (i + 1) % new_sector->num_walls;
-                                    new_sector->walls[i].prev          = (i - 1 + new_sector->num_walls) % new_sector->num_walls;
-                                    new_sector->walls[i].portal_sector = NULL;
-                                    new_sector->walls[i].portal_wall   = NULL;
-
+                                for (unsigned i = add_index; i < new_len; ++i) {
                                     lw_recalcLinePlane(&new_sector->walls[i]);
                                 }
-                                lw_recalcLinePlane(&new_sector->walls[new_sector->num_walls - 1]);
 
-                                // while leaving list is not empty
-                                // remove item from leaving list
-                                // start at that item in clipper
-                                // walk backwards along clipper and jump to subject when reaching an intersection
-                                // walk forwards along subject, jumping when reaching an intersection
-                                // remove item from leaving list if passed over
+                                new_sector->num_walls = new_len;
 
-                                // required for splitting sector into multiple sectors
-                                LW_Sector *construction_sector = sector;
-
-                                // next will be the actual start
-                                LW_SectorListNode *start_of_new_sectors = editor->world.sectors.tail;
-
-                                while (num_leaving > 0) {
-                                    --num_leaving;
-                                    unsigned start_intersection = leaving_list[num_leaving];
-
-                                    struct WaPoly *active_list = clipper_poly_list;
-                                    struct WaPoly *other_list  = subject_poly_list;
-                                    // unsigned active_len        = clipper_len;
-                                    // unsigned other_len         = subject_len;
-
-                                    unsigned i                    = 0; // in polygon space
-                                    struct WaPoly *active_polygon = clipper_poly_list;
-                                    // find start index for clipper
-                                    for (; i < clipper_len; ++i) {
-                                        if (clipper[i].intersection_index == start_intersection) break;
-                                    }
-
-                                    if (i == clipper_len) break;
-
-                                    LW_LineDef *new_walls  = calloc(clipper_len + subject_len, sizeof(*new_walls));
-                                    unsigned num_new_walls = 0;
-
-                                    do {
-                                        // push point
-                                        // walk
-                                        // jump if intersection
-                                        // remove from leaving_list if needed
-
-                                        new_walls[num_new_walls].start[0] = active_polygon->start[i].point[0];
-                                        new_walls[num_new_walls].start[1] = active_polygon->start[i].point[1];
-                                        new_walls[num_new_walls].sector   = construction_sector;
-                                        new_walls[num_new_walls].next     = num_new_walls + 1;
-                                        new_walls[num_new_walls].prev     = num_new_walls - 1;
-
-                                        new_walls[num_new_walls].portal_sector = active_polygon->start[i].portal_sector;
-                                        new_walls[num_new_walls].portal_wall   = active_polygon->start[i].portal_wall;
-
-                                        if (new_walls[num_new_walls].portal_wall) {
-                                            new_walls[num_new_walls].portal_wall->portal_wall   = &new_walls[num_new_walls];
-                                            new_walls[num_new_walls].portal_wall->portal_sector = construction_sector;
-                                        }
-
-                                        ++num_new_walls;
-
-                                        if (active_list->start == clipper)
-                                            i = (i - 1 + active_polygon->len) % active_polygon->len;
-                                        else {
-                                            i = (i + 1) % active_polygon->len;
-                                        }
-
-                                        if (active_polygon->start[i].intersection_index != UNDEFINED) {
-                                            unsigned index = active_polygon->start[i].intersection_index;
-                                            // remove from leaving list
-                                            for (unsigned j = 0; j < num_leaving; ++j) {
-                                                if (leaving_list[j] == index) {
-                                                    --num_leaving;
-                                                    leaving_list[j] = leaving_list[num_leaving];
-                                                }
-                                            }
-
-                                            // jump to other list
-                                            swap(struct WaPoly *, active_list, other_list);
-                                            // swap(unsigned, active_len, other_len);
-
-                                            // find index and polygon
-                                            active_polygon = active_list;
-                                            for (; active_polygon != NULL; active_polygon = active_polygon->next) {
-                                                for (i = 0; i < active_polygon->len; ++i) {
-                                                    if (active_polygon->start[i].intersection_index == index) goto _new_poly_and_index_found;
-                                                }
-                                            }
-
-                                            printf("Polygon not found! Recover somehow!\n");
-                                            return 1;
-
-                                        _new_poly_and_index_found:
-                                        }
-
-                                    } while (active_polygon->start[i].intersection_index != start_intersection);
-
-                                    if (num_new_walls < 3) {
-                                        // dont add
-                                        free(new_walls);
-                                        continue;
-                                    }
-
-                                    // fix last and first wall prev and next
-                                    new_walls[0].prev                 = num_new_walls - 1;
-                                    new_walls[num_new_walls - 1].next = 0;
-
-                                    // finish and update sector
-
-                                    //TODO Move this: new_walls = realloc(new_walls, num_new_walls * sizeof(*new_walls)); // free unused memory
-
-                                    free(construction_sector->walls);
-                                    construction_sector->walls     = new_walls;
-                                    construction_sector->num_walls = num_new_walls;
-
-                                    for (unsigned i = 0; i < construction_sector->num_walls; ++i) {
-                                        lw_recalcLinePlane(&construction_sector->walls[i]);
-                                    }
-
-                                    if (num_leaving == 0) break;
-
-                                    // create sector for next loop
-                                    LW_Sector tmp_sector;
-
-                                    tmp_sector.num_subsectors = sector->num_subsectors;
-                                    tmp_sector.subsectors     = malloc(sector->num_subsectors * sizeof(*tmp_sector.subsectors));
-                                    memcpy(tmp_sector.subsectors, sector->subsectors, sector->num_subsectors * sizeof(*sector->subsectors));
-                                    tmp_sector.walls = NULL;
-
-                                    LW_SectorList_push_back(&editor->world.sectors, tmp_sector);
-                                    construction_sector = &editor->world.sectors.tail->item;
-                                }
-
-                                // add unhandled holes
-                                for (struct WaPoly *node = subject_poly_list; node != NULL; node = node->next) {
-                                    // intersections should have been handled
-                                    if (node->has_intersections) continue;
-                                    // check if this is inside the clipper, if so, don't add
-                                    if (lw_pointInSector(*new_sector, node->start[0].point, false)) continue;
-
-                                    // attempt to add to start sector
-                                    if (lw_pointInSector(*sector, node->start[0].point, false)) {
-                                        unsigned sub_start = sector->num_walls;
-                                        sector->num_walls += node->len;
-
-                                        for (unsigned i = node->len; i > 0;) {
-                                            --i;
-                                            unsigned j = sub_start + i;
-
-                                            sector->walls[j].start[0] = node->start[i].point[0];
-                                            sector->walls[j].start[1] = node->start[i].point[1];
-                                            sector->walls[j].sector   = sector;
-                                            sector->walls[j].next     = j + 1;
-                                            sector->walls[j].prev     = j - 1;
-
-                                            sector->walls[j].portal_sector = node->start[i].portal_sector;
-                                            sector->walls[j].portal_wall   = node->start[i].portal_wall;
-
-                                            if (sector->walls[j].portal_wall) {
-                                                sector->walls[j].portal_wall->portal_wall   = &sector->walls[j];
-                                                sector->walls[j].portal_wall->portal_sector = sector;
-                                            }
-
-                                            lw_recalcLinePlane(&sector->walls[j]);
-                                        }
-
-                                        sector->walls[sub_start].prev             = sector->num_walls - 1;
-                                        sector->walls[sector->num_walls - 1].next = sub_start;
-                                        lw_recalcLinePlane(&sector->walls[sector->num_walls - 1]);
-
-                                        continue;
-                                    }
-
-                                    // go through each new sector and check which one to add it to
-                                    for (LW_SectorListNode *slnode = start_of_new_sectors->next; slnode != NULL; slnode = slnode->next) {
-                                        LW_Sector *new_sector_item = &slnode->item;
-
-                                        if (lw_pointInSector(*new_sector_item, node->start[0].point, false)) {
-                                            unsigned sub_start = new_sector_item->num_walls;
-                                            new_sector_item->num_walls += node->len;
-
-                                            for (unsigned i = node->len; i > 0;) {
-                                                --i;
-                                                unsigned j = sub_start + i;
-
-                                                new_sector_item->walls[j].start[0] = node->start[i].point[0];
-                                                new_sector_item->walls[j].start[1] = node->start[i].point[1];
-                                                new_sector_item->walls[j].sector   = new_sector_item;
-                                                new_sector_item->walls[j].next     = j + 1;
-                                                new_sector_item->walls[j].prev     = j - 1;
-
-                                                new_sector_item->walls[j].portal_sector = node->start[i].portal_sector;
-                                                new_sector_item->walls[j].portal_wall   = node->start[i].portal_wall;
-
-                                                if (new_sector_item->walls[j].portal_wall) {
-                                                    new_sector_item->walls[j].portal_wall->portal_wall   = &new_sector_item->walls[j];
-                                                    new_sector_item->walls[j].portal_wall->portal_sector = new_sector_item;
-                                                }
-
-                                                lw_recalcLinePlane(&new_sector_item->walls[j]);
-                                            }
-
-                                            new_sector_item->walls[sub_start].prev                      = new_sector_item->num_walls - 1;
-                                            new_sector_item->walls[new_sector_item->num_walls - 1].next = sub_start;
-                                            lw_recalcLinePlane(&new_sector_item->walls[new_sector_item->num_walls - 1]);
-
-                                            break;
-                                        }
-                                    }
-                                }
-
-                                // cleanup
-
-                                for (struct WaPoly *node = subject_poly_list; node != NULL;) {
-                                    struct WaPoly *node1 = node->next;
-                                    free(node);
-                                    node = node1;
-                                }
-
-                                // should only ever be one, but just to be sure
-                                for (struct WaPoly *node = clipper_poly_list; node != NULL;) {
-                                    struct WaPoly *node1 = node->next;
-                                    free(node);
-                                    node = node1;
-                                }
-
-                                free(leaving_list);
-                                free(subject);
-                                free(clipper);
-                                free(intersections);
+                                ///////////////////////////////////////////////////////////////////////////////////////////////
                             }
                         }
 
@@ -1408,6 +849,8 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             // add portals
                             for (unsigned i = 0; i < new_sector->num_walls; ++i) {
                                 for (unsigned j = 0; j < sector->num_walls; ++j) {
+                                    if(sector->walls[j].portal_sector != NULL) continue;
+
                                     if (_validPortalOverlap(&new_sector->walls[i], &sector->walls[j])) {
                                         // TODO: This could be somewhere else
                                         if (new_sector->subsectors[0].floor_height > sector->subsectors[0].floor_height)

@@ -176,11 +176,11 @@ bool lw_pointInSector(LW_Sector sector, lw_vec2 point, bool count_edges) {
         line[1][0] = sector.walls[sector.walls[i].next].start[0];
         line[1][1] = sector.walls[sector.walls[i].next].start[1];
 
-        if (lw_intersectSegmentRay(line, ray, &t, &u)) {
-            if(lw_pointOnSegment(line, point)) {
-                return count_edges;
-            }
+        if (lw_pointOnSegment(line, point)) {
+            return count_edges;
+        }
 
+        if (lw_intersectSegmentRay(line, ray, &t, &u)) {
             // If hitting a vertex exactly, only count if other vertex is above the ray
             if (t != 0.0f && t != 1.0f) {
                 ++num_intersections;
@@ -258,20 +258,20 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
     LW_Frustum frustum_queue[SECTOR_QUEUE_SIZE];
     unsigned sector_queue_start = 0, sector_queue_end = 0;
 
-    sector_queue[sector_queue_end]     = cam.sector != NULL ? cam.sector : default_sector;
+    sector_queue[sector_queue_end]    = cam.sector != NULL ? cam.sector : default_sector;
     subsector_queue[sector_queue_end] = cam.sector != NULL ? cam.subsector : 0;
-    frustum_queue[sector_queue_end]    = start_frustum;
-    sector_queue_end                   = (sector_queue_end + 1) % SECTOR_QUEUE_SIZE;
+    frustum_queue[sector_queue_end]   = start_frustum;
+    sector_queue_end                  = (sector_queue_end + 1) % SECTOR_QUEUE_SIZE;
 
     unsigned sector_id = 0;
-    bool first = true;
+    bool first         = true;
 
     while (sector_queue_start != sector_queue_end) {
         ++sector_id;
-        LW_Sector *sector   = sector_queue[sector_queue_start];
+        LW_Sector *sector  = sector_queue[sector_queue_start];
         unsigned subsector = subsector_queue[sector_queue_start];
-        LW_Frustum frustum  = frustum_queue[sector_queue_start];
-        sector_queue_start  = (sector_queue_start + 1) % SECTOR_QUEUE_SIZE;
+        LW_Frustum frustum = frustum_queue[sector_queue_start];
+        sector_queue_start = (sector_queue_start + 1) % SECTOR_QUEUE_SIZE;
 
         LW_Subsector def = sector->subsectors[subsector];
 
@@ -390,10 +390,10 @@ void _renderSector(LW_Framebuffer *const framebuffer, LW_Camera cam, LW_Frustum 
                         LW_Frustum next_frustum = lw_calcFrustumFromPoly(clipped_poly, clipped_len, cam.pos); // TODO add far plane
 
                         // draw next sector
-                        sector_queue[sector_queue_end]     = portal_sector;
+                        sector_queue[sector_queue_end]    = portal_sector;
                         subsector_queue[sector_queue_end] = ssid;
-                        frustum_queue[sector_queue_end]    = next_frustum;
-                        sector_queue_end                   = (sector_queue_end + 1) % SECTOR_QUEUE_SIZE;
+                        frustum_queue[sector_queue_end]   = next_frustum;
+                        sector_queue_end                  = (sector_queue_end + 1) % SECTOR_QUEUE_SIZE;
                     }
                 }
                 if (def.ceiling_height > max_ceiling) {

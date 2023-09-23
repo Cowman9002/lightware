@@ -79,6 +79,7 @@ bool lw_pointOnSegment(lw_vec2 line[2], lw_vec2 point) {
 
     // cross of two lines going from a to b and from a to c
     float cross3 = (c[1] - a[1]) * (b[0] - a[0]) - (c[0] - a[0]) * (b[1] - a[1]);
+
     // check if point is on line
     if (fabsf(cross3) > 0.003f) return false;
 

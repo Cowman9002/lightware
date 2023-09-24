@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stddef.h>
 
 #if !defined(LIST_TAG) || !defined(LIST_ITEM_TYPE)
 #error Missing type or tag definition

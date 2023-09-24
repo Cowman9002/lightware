@@ -440,7 +440,17 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                         closest->portal_wall                = NULL;
                     }
                 }
+            } else if (isInputActionDown(context, InputName_joinSectors)) {
+                LW_SectorListNode *node = editor->world.sectors.head;
+                for (; node != NULL; node = node->next) {
+                    LW_Sector *sec = &node->item;
 
+                    if (lw_pointInSector(*sec, editor->data2d.mouse_world_pos, false)) {
+                        editor->data2d.join_src = sec;
+                        editor->data2d.state    = StateJoinSectors;
+                        break;
+                    }
+                }
             } else if (isInputActionDown(context, InputName_selectionBox)) {
                 editor->data2d.state = StateSelectionBox;
                 for (unsigned i = 0; i < 2; ++i) {
@@ -779,6 +789,86 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
             }
             break;
             ///////////////////////////////////////////////
+        case StateJoinSectors:
+            if (isInputActionDown(context, InputName_cancel)) {
+                // cancel
+                editor->data2d.state = StateIdle;
+            } else if (isInputActionDown(context, InputName_selectPoint)) {
+                LW_Sector *join_src     = editor->data2d.join_src;
+                LW_Sector *other_sector = NULL;
+
+                LW_SectorListNode *node = editor->world.sectors.head;
+                for (; node != NULL; node = node->next) {
+                    LW_Sector *sec = &node->item;
+
+                    if (lw_pointInSector(*sec, editor->data2d.mouse_world_pos, false)) {
+                        // check if any portal exist between the two
+                        for (unsigned i = 0; i < sec->num_walls; ++i) {
+                            if (sec->walls[i].portal_sector == join_src) {
+                                // only join double sided connected portals
+                                if (sec->walls[i].portal_wall != NULL && sec->walls[i].portal_wall->portal_wall != NULL) {
+                                    if (_validPortalOverlap(&sec->walls[i], sec->walls[i].portal_wall)) {
+                                        other_sector = sec;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (other_sector != NULL) {
+                    // fun part. add all walls from join sector to src sector, but remove portals
+
+                    {
+                        LW_LineDef *old = join_src->walls;
+                        join_src->walls = realloc(join_src->walls, (join_src->num_walls + other_sector->num_walls) * sizeof(*join_src->walls));
+
+                        // update portal walls
+                        if (old != join_src->walls) {
+                            for (unsigned i = 0; i < join_src->num_walls; ++i) {
+                                if (join_src->walls[i].portal_wall != NULL) {
+                                    join_src->walls[i].portal_wall->portal_wall = &join_src->walls[i];
+                                }
+                            }
+                        }
+                    }
+
+                    unsigned new_len = join_src->num_walls;
+                    for (unsigned i = 0; i < other_sector->num_walls; ++i) {
+                        LW_LineDef *other_wall = &other_sector->walls[i];
+
+                        join_src->walls[new_len]        = *other_wall;
+                        join_src->walls[new_len].sector = join_src;
+                        join_src->walls[new_len].next += join_src->num_walls;
+                        join_src->walls[new_len].prev += join_src->num_walls;
+
+                        if (join_src->walls[new_len].portal_sector == join_src) {
+                            join_src->walls[new_len].portal_wall->portal_wall   = NULL;
+                            join_src->walls[new_len].portal_wall->portal_sector   = NULL;
+                            join_src->walls[new_len].portal_wall   = NULL;
+                            join_src->walls[new_len].portal_sector = NULL;
+
+
+                        } else if (join_src->walls[new_len].portal_sector != NULL) {
+                            join_src->walls[new_len].portal_wall->portal_wall   = &join_src->walls[new_len];
+                            join_src->walls[new_len].portal_wall->portal_sector = join_src;
+                        }
+
+                        ++new_len;
+                    }
+
+                    join_src->num_walls = new_len;
+
+                    // yeah, I could do this while building the sector, but that was hard :C
+                    _removeOverlappingWalls(editor, join_src);
+
+                    LW_SectorList_remove(&editor->world.sectors, other_sector);
+                }
+
+                editor->data2d.state = StateIdle;
+            }
+            break;
         case StateSelectionBox:
             if (isInputActionDown(context, InputName_cancel)) {
                 // cancel
@@ -908,8 +998,10 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             LW_Sector *sector = &node->item;
 
                             // check if new sector is inside or outside of sector
-                            bool all_inside  = true;
-                            bool all_outside = true;
+                            bool all_inside       = true;
+                            bool all_outside      = true;
+                            bool other_all_inside = false;
+
                             for (unsigned i = 0; i < new_sector->num_walls; ++i) {
                                 if (!lw_pointInSector(*sector, new_sector->walls[i].start, true)) {
                                     all_inside = false;
@@ -920,7 +1012,15 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                                 if (!all_inside && !all_outside) break;
                             }
 
-                            printf("Outside: %i, inside: %i\n", all_outside, all_inside);
+                            if (all_outside) {
+                                other_all_inside = true;
+                                for (unsigned i = 0; i < sector->num_walls; ++i) {
+                                    if (!lw_pointInSector(*new_sector, sector->walls[i].start, true)) {
+                                        other_all_inside = false;
+                                        break;
+                                    }
+                                }
+                            }
 
                             if (all_inside) {
                                 // add entire sector as portals
@@ -967,7 +1067,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                                 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-                            } else if (all_outside && lw_pointInSector(*new_sector, sector->walls[0].start, true)) {
+                            } else if (all_outside && other_all_inside) {
                                 // add sector as a hole. opposite to above
 
                                 // if all are portals, this is an internal sector
@@ -1020,7 +1120,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                                 new_sector->walls[add_index].prev   = new_len - 1;
                                 new_sector->walls[new_len - 1].next = add_index;
-                                new_sector->num_walls = new_len;
+                                new_sector->num_walls               = new_len;
 
                                 for (unsigned i = add_index; i < new_len; ++i) {
                                     lw_recalcLinePlane(&new_sector->walls[i]);
@@ -1286,6 +1386,9 @@ int editor2dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
             break;
         case StateSelectionBox:
             snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "Box select");
+            break;
+        case StateJoinSectors:
+            snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "Join sectors");
             break;
         default:
             snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "UNDEFINED STATE");

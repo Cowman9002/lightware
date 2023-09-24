@@ -1,7 +1,7 @@
 TARGET := lightware_editor
 LIBS := -L../lib -lm -lgdi32 -lcomdlg32 -lole32 -lcomctl32 -loleaut32 -luuid -lshlwapi -lzdll -lSDL2main -lSDL2.dll -llightware.dll
 CC := x86_64-w64-mingw32-gcc
-CFLAGS := -I../include -Wall -MD -MP -ggdb
+CFLAGS := -I../include -Wall -MD -MP -ggdb -std=c11
 DEFINES := -DVERSION_MAJOR=0 -DVERSION_MINOR=1
 
 .PHONY: default all clean

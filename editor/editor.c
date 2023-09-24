@@ -85,6 +85,7 @@ bool editorInit(Editor *const editor) {
     setInputAction(InputName_deletePoints, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyX, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_splitLine, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyC, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_autoPortal, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyV, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_joinSectors, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyJ, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_selectionBox, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyB, .disallowed_modifiers = 0, .required_modifiers = 0 });
 
     return true;

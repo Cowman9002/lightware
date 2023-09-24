@@ -44,6 +44,7 @@ typedef enum InputName {
     InputName_deletePoints,
     InputName_splitLine,
     InputName_autoPortal,
+    InputName_joinSectors,
     InputName_selectionBox,
 
     InputName_size,
@@ -72,6 +73,7 @@ typedef enum State {
     StateCreateSector,
     StateMovePoints,
     StateSelectionBox,
+    StateJoinSectors,
 } State;
 
 struct EditorData2d {
@@ -112,6 +114,9 @@ struct EditorData2d {
     // selection box
     LW_Aabb selection_box;
     lw_vec2 selection_box_pivot;
+
+    // join sectors
+    LW_Sector *join_src;
 };
 
 typedef enum RayHitType {

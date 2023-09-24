@@ -508,6 +508,7 @@ LIGHTWARE_API LW_Sector *lw_getSector(LW_PortalWorld pod, lw_vec2 point);
 LIGHTWARE_API unsigned lw_getSubSector(LW_Sector *sector, lw_vec3 point);
 
 LIGHTWARE_API void lw_renderPortalWorld(LW_Framebuffer *const framebuffer, LW_PortalWorld pod, LW_Camera camera);
+LIGHTWARE_API void lw_renderPortalWorldWireframe(LW_Framebuffer *const framebuffer, LW_PortalWorld pod, LW_Camera camera);
 
 
 //

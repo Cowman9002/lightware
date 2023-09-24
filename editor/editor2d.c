@@ -845,9 +845,9 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                         if (join_src->walls[new_len].portal_sector == join_src) {
                             join_src->walls[new_len].portal_wall->portal_wall   = NULL;
-                            join_src->walls[new_len].portal_wall->portal_sector   = NULL;
-                            join_src->walls[new_len].portal_wall   = NULL;
-                            join_src->walls[new_len].portal_sector = NULL;
+                            join_src->walls[new_len].portal_wall->portal_sector = NULL;
+                            join_src->walls[new_len].portal_wall                = NULL;
+                            join_src->walls[new_len].portal_sector              = NULL;
 
 
                         } else if (join_src->walls[new_len].portal_sector != NULL) {
@@ -998,31 +998,32 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                             LW_Sector *sector = &node->item;
 
                             // check if new sector is inside or outside of sector
-                            bool all_inside       = true;
-                            bool all_outside      = true;
-                            bool other_all_inside = false;
+                            unsigned num_inside        = 0;
+                            unsigned num_outside       = 0;
+                            unsigned other_num_outside = 0;
+                            unsigned other_num_inside  = 0;
 
                             for (unsigned i = 0; i < new_sector->num_walls; ++i) {
+                                if (lw_pointInSector(*sector, new_sector->walls[i].start, false)) {
+                                    ++num_inside;
+                                } 
                                 if (!lw_pointInSector(*sector, new_sector->walls[i].start, true)) {
-                                    all_inside = false;
-                                } else if (lw_pointInSector(*sector, new_sector->walls[i].start, false)) {
-                                    all_outside = false;
-                                }
-
-                                if (!all_inside && !all_outside) break;
-                            }
-
-                            if (all_outside) {
-                                other_all_inside = true;
-                                for (unsigned i = 0; i < sector->num_walls; ++i) {
-                                    if (!lw_pointInSector(*new_sector, sector->walls[i].start, true)) {
-                                        other_all_inside = false;
-                                        break;
-                                    }
+                                    ++num_outside;
                                 }
                             }
 
-                            if (all_inside) {
+                            for (unsigned i = 0; i < sector->num_walls; ++i) {
+                                if (lw_pointInSector(*new_sector, sector->walls[i].start, false)) {
+                                    ++other_num_inside;
+                                } 
+                                if(!lw_pointInSector(*new_sector, sector->walls[i].start, true)) {
+                                    ++other_num_outside;
+                                }
+                            }
+
+                            // TODO: Issue when line is entirely outside, but points overlap, resulting in the algo thinking it is inside
+
+                            if (num_outside == 0 && other_num_inside == 0) {
                                 // add entire sector as portals
                                 new_sector->subsectors[0].floor_height   = sector->subsectors[0].floor_height;
                                 new_sector->subsectors[0].ceiling_height = sector->subsectors[sector->num_subsectors - 1].ceiling_height;
@@ -1067,9 +1068,10 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
 
                                 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-                            } else if (all_outside && other_all_inside) {
+                            } else if (num_inside == 0 && other_num_outside == 0) {
                                 // add sector as a hole. opposite to above
 
+                                // hax to prevent clipping on sectors that are subsectors of another sector
                                 // if all are portals, this is an internal sector
                                 for (unsigned i = 0; i < sector->num_walls; ++i) {
                                     if (sector->walls[i].portal_sector == NULL) goto _not_an_internal_sector;

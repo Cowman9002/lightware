@@ -56,6 +56,7 @@ typedef unsigned lw_uvec3[3];
 LIGHTWARE_API float lw_dot2d(lw_vec2 a, lw_vec2 b);
 LIGHTWARE_API float lw_cross2d(lw_vec2 a, lw_vec2 b);
 LIGHTWARE_API float lw_dist2d(lw_vec2 a, lw_vec2 b);
+LIGHTWARE_API float lw_sqrDist2d(lw_vec2 a, lw_vec2 b);
 LIGHTWARE_API float lw_normalized2d(lw_vec2 a, lw_vec2 o);
 LIGHTWARE_API float lw_normalize2d(lw_vec2 a);
 LIGHTWARE_API void lw_rot2d(lw_vec2 a, float r, lw_vec2 o);
@@ -106,6 +107,9 @@ LIGHTWARE_API void lw_deinit(LW_Context *const context);
 LIGHTWARE_API int lw_start(LW_Context *const context);
 
 LIGHTWARE_API void *lw_getUserData(LW_Context *const context);
+LIGHTWARE_API float lw_getSeconds(LW_Context *const context);
+
+LIGHTWARE_API void lw_setWindowTitle(LW_Context *const context, const char *title);
 
 //
 //  INPUT
@@ -294,11 +298,11 @@ typedef enum LW_Key {
     LW_KeyRGui   = 231, /**< windows, command (apple), meta */
 
     LW_KeycodeSize
-} LW_Keycode;
+} LW_Key;
 
-LIGHTWARE_API bool lw_isKey(LW_Context *const context, LW_Keycode key);
-LIGHTWARE_API bool lw_isKeyDown(LW_Context *const context, LW_Keycode key);
-LIGHTWARE_API bool lw_isKeyUp(LW_Context *const context, LW_Keycode key);
+LIGHTWARE_API bool lw_isKey(LW_Context *const context, LW_Key key);
+LIGHTWARE_API bool lw_isKeyDown(LW_Context *const context, LW_Key key);
+LIGHTWARE_API bool lw_isKeyUp(LW_Context *const context, LW_Key key);
 
 LIGHTWARE_API bool lw_isMouseButton(LW_Context *const context, unsigned button);
 LIGHTWARE_API bool lw_isMouseButtonDown(LW_Context *const context, unsigned button);
@@ -344,11 +348,15 @@ LIGHTWARE_API bool lw_pointInPoly(lw_vec2 *vertices, unsigned num_verts, lw_vec2
 /// @return true if point is inside of the polygon
 LIGHTWARE_API bool lw_pointInConvexPoly(lw_vec2 *vertices, unsigned num_vertices, lw_vec2 point);
 
-LIGHTWARE_API bool lw_intersectSegmentPlane(lw_vec3 line[2], lw_vec4 plane, float *o_t);
+LIGHTWARE_API bool lw_pointOnSegment(lw_vec2 line[2], lw_vec2 point);
 
-LIGHTWARE_API bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t);
+LIGHTWARE_API bool lw_intersectSegmentPlane(lw_vec3 line[2], lw_vec4 plane, float *o_t);
+LIGHTWARE_API bool lw_intersectRayPlane(lw_vec3 ray[2], lw_vec4 plane, float *o_t);
+
+LIGHTWARE_API bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t, float *o_u);
 LIGHTWARE_API bool lw_intersectSegmentLine(lw_vec2 seg[2], lw_vec2 line[2], float *o_t);
-LIGHTWARE_API bool lw_intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float *o_t);
+// ray is defined as origin direction, but direction doesn't need to be normalized
+LIGHTWARE_API bool lw_intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float *o_t, float *o_u);
 
 LIGHTWARE_API void lw_calcPlaneFromPoints(lw_vec3 p0, lw_vec3 p1, lw_vec3 p2, lw_vec4 o_plane);
 
@@ -430,13 +438,13 @@ typedef struct LW_Subsector {
 typedef struct LW_Sector LW_Sector;
 typedef struct LW_LineDef {
     lw_vec2 start; // position
-    unsigned end;  // index to other linedef
+    unsigned next;  // index to other linedef
     unsigned prev;  // index to last linedef
     LW_Sector *sector;
 
     lw_vec4 plane;
-    LW_Sector *next;
-    struct LW_LineDef *other_wall;
+    LW_Sector *portal_sector;
+    struct LW_LineDef *portal_wall;
 } LW_LineDef;
 
 typedef struct LW_Sector {
@@ -444,8 +452,8 @@ typedef struct LW_Sector {
     LW_LineDef *walls;               // list
 
     // definitions of sub sectors for sector over sector
-    unsigned num_sub_sectors;
-    LW_Subsector *sub_sectors; // list
+    unsigned num_subsectors;
+    LW_Subsector *subsectors; // list
 } LW_Sector;
 
 #define LIST_TAG LW_SectorList
@@ -464,7 +472,7 @@ typedef struct LW_Frustum {
 
 typedef struct LW_Camera {
     LW_Sector *sector;
-    unsigned sub_sector;
+    unsigned subsector;
 
     lw_vec3 pos;
     float yaw, pitch;
@@ -484,15 +492,18 @@ typedef struct LW_Camera {
 LIGHTWARE_API void lw_calcCameraFrustum(LW_Camera *const cam);
 LIGHTWARE_API void lw_calcCameraProjection(LW_Camera *const cam);
 LIGHTWARE_API LW_Frustum lw_calcFrustumFromPoly(lw_vec3 *polygon, unsigned num_verts, lw_vec3 view_point);
+LIGHTWARE_API void lw_screenPointToRay(LW_Camera cam, int width, int height, lw_vec2 point, lw_vec3 o_pos, lw_vec3 o_dir);
 
-LIGHTWARE_API bool lw_loadPortalWorld(const char *path, float scale, LW_PortalWorld *o_pod);
+LIGHTWARE_API bool lw_loadPortalWorld(const char *path, LW_PortalWorld *o_pod);
+LIGHTWARE_API bool lw_savePortalWorld(const char *path, LW_PortalWorld pod);
+
 LIGHTWARE_API void lw_recalcLinePlane(LW_LineDef *const linedef);
 
 LIGHTWARE_API void lw_freeSubsector(LW_Subsector subsector);
 LIGHTWARE_API void lw_freeSector(LW_Sector sector);
 LIGHTWARE_API void lw_freePortalWorld(LW_PortalWorld pod);
 
-LIGHTWARE_API bool lw_pointInSector(LW_Sector sector, lw_vec2 point);
+LIGHTWARE_API bool lw_pointInSector(LW_Sector sector, lw_vec2 point, bool count_edges);
 LIGHTWARE_API LW_Sector *lw_getSector(LW_PortalWorld pod, lw_vec2 point);
 LIGHTWARE_API unsigned lw_getSubSector(LW_Sector *sector, lw_vec3 point);
 

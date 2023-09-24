@@ -3,38 +3,81 @@
 
 #define UNDEFINED (~0)
 
+#define CAMERA_3D_HEIGHT 1.6f
+
 #define MIN_ZOOM 0.001
 #define MAX_ZOOM 1.0
 #define MAX_GRID (256.0f)
 #define MIN_GRID (1.0f / 32.0f)
 
 #define TEXT_BUFFER_SIZE 64
+#define FILE_NAME_BUFFER_SIZE 512
 
-#define POINT_RENDER_RADIUS 4
-#define LINE_SELECTION_RADIUS 3
+#define POINT_RENDER_RADIUS 3
+#define LINE_SELECTION_RADIUS 5
 
 #define AUTO_PORTAL_EPSILON 0.003
+
+typedef enum InputName {
+    InputName_swapViews,
+
+    InputName_moveForwards,
+    InputName_moveBackwards,
+    InputName_moveLeft,
+    InputName_moveRight,
+    InputName_rotateLeft,
+    InputName_rotateRight,
+
+    InputName_toggleGrid,
+    InputName_increaseGrid,
+    InputName_decreaseGrid,
+    InputName_specterSelect,
+
+    InputName_cancel,
+
+    InputName_selectPoint,
+    InputName_multiSelect,
+    InputName_selectSector,
+    InputName_multiSelectSector,
+
+    InputName_newSector,
+    InputName_deletePoints,
+    InputName_splitLine,
+    InputName_autoPortal,
+    InputName_joinSectors,
+    InputName_selectionBox,
+
+    InputName_size,
+} InputName;
+
+#define MODIFIER_SHIFT (1 << 0)
+#define MODIFIER_CTRL (1 << 1)
+#define MODIFIER_ALT (1 << 2)
+
+typedef struct InputAction {
+    enum type {
+        InputTypeKey,
+        InputTypeButton,
+    } type;
+
+    union major {
+        LW_Key key;
+        unsigned button;
+    } major;
+    uint8_t required_modifiers;   // these must be active
+    uint8_t disallowed_modifiers; // these cannot be active
+} InputAction;
 
 typedef enum State {
     StateIdle = 0,
     StateCreateSector,
     StateMovePoints,
     StateSelectionBox,
-}State;
+    StateJoinSectors,
+} State;
 
-typedef struct Editor {
-    char *text_buffer;
-    LW_FontTexture font;
-    int width, height;
-
-    LW_Color c_background, c_grid, c_font;
-    LW_Color c_walls, c_vertices, c_portal;
-    LW_Color c_new_walls, c_new_vertices, c_start_vertex;
-    LW_Color c_sel_vertex, c_selection_box, c_highlighted_vertices;
-
-    // 3d mode
-    bool view_3d;
-    LW_Camera cam3d;
+struct EditorData2d {
+    // Selection
 
     LW_LineDef **selected_points;
     unsigned selected_points_len, selected_points_capacity;
@@ -58,10 +101,11 @@ typedef struct Editor {
     lw_vec4 mouse_world_pos;
     lw_vec4 mouse_snapped_pos;
 
-    LW_PortalWorld world;
-
     // state machine
     State state;
+
+    // move points
+    lw_vec2 move_origin;
 
     // create sector state
     LW_Sector new_sector;
@@ -71,7 +115,50 @@ typedef struct Editor {
     LW_Aabb selection_box;
     lw_vec2 selection_box_pivot;
 
-}Editor;
+    // join sectors
+    LW_Sector *join_src;
+};
+
+typedef enum RayHitType {
+    RayHitType_None = 0,
+    RayHitType_Floor,
+    RayHitType_Ceiling,
+    RayHitType_Wall0,
+} RayHitType;
+
+struct EditorData3d {
+    LW_Camera camera;
+    
+    RayHitType ray_hit_type;
+    lw_vec3 intersect_point;
+    float intersect_dist;
+
+    float floor_snap_val;
+    float copied_height_val;
+};
+
+typedef struct Editor {
+    char *open_file;
+    char *open_file_relative;
+    char *project_directory;
+
+    LW_PortalWorld world;
+    
+    char *text_buffer;
+    LW_FontTexture font;
+    int width, height;
+
+    LW_Color c_background, c_grid, c_font;
+    LW_Color c_walls, c_vertices, c_portal;
+    LW_Color c_new_walls, c_new_vertices, c_start_vertex;
+    LW_Color c_sel_vertex, c_selection_box, c_highlighted_vertices;
+    
+    bool view_3d;
+
+    struct EditorData3d data3d;
+    struct EditorData2d data2d;
+
+} Editor;
 
 bool editorInit(Editor *const editor);
 int editorUpdate(Editor *const editor, float dt, LW_Context *const context);
@@ -82,3 +169,8 @@ int editor2dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
 
 int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context);
 int editor3dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_Context *const context);
+
+void setInputAction(InputName action, InputAction val);
+bool isInputAction(LW_Context *const context, InputName action);
+bool isInputActionDown(LW_Context *const context, InputName action);
+bool isInputActionUp(LW_Context *const context, InputName action);

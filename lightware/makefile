@@ -1,7 +1,7 @@
 TARGET := lightware.dll
 LIBS := -L../lib -lm -lgdi32 -lzdll -lSDL2main -lSDL2.dll
 CC := x86_64-w64-mingw32-gcc
-CFLAGS := -I../include -Wall -MD -MP -ggdb
+CFLAGS := -I../include -Wall -MD -MP -ggdb -std=c11
 DEFINES := -DVERSION_MAJOR=0 -DVERSION_MINOR=1 -DLIGHTWARE_EXPORT
 
 .PHONY: default all clean
@@ -9,7 +9,7 @@ DEFINES := -DVERSION_MAJOR=0 -DVERSION_MINOR=1 -DLIGHTWARE_EXPORT
 default: $(TARGET)
 all: default
 
-SOURCES = lodepng.c lightware.c draw.c mathlib.c geo.c portal.c collision.c
+SOURCES = lodepng.c lightware.c draw.c mathlib.c geo.c portal.c collision.c fileio.c
 OBJECTS = $(patsubst %.c, obj/%.o, $(SOURCES))
 HEADERS = $(wildcard *.h)
 

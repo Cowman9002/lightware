@@ -1,9 +1,10 @@
 #include "internal.h"
 
 #include <math.h>
+#include <stdio.h>
 
 bool lw_pointInPoly(lw_vec2 *vertices, unsigned num_verts, lw_vec2 point) {
-    lw_vec2 ray[2] = { { point[0], point[1] }, { point[0] - 1.0f, point[1] } };
+    lw_vec2 ray[2] = { { point[0], point[1] }, { -1.0f, 0.0f } };
     lw_vec2 line[2];
     float t;
 
@@ -17,7 +18,7 @@ bool lw_pointInPoly(lw_vec2 *vertices, unsigned num_verts, lw_vec2 point) {
         line[1][0] = vertices[i + 1][0];
         line[1][1] = vertices[i + 1][1];
 
-        if (lw_intersectSegmentRay(line, ray, &t)) {
+        if (lw_intersectSegmentRay(line, ray, &t, NULL)) {
             // If hitting a vertex exactly, only count if other vertex is above the ray
             if (t != 0.0f && t != 1.0f) {
                 ++num_intersections;
@@ -70,6 +71,28 @@ bool lw_pointInConvexPoly(lw_vec2 *vertices, unsigned num_vertices, lw_vec2 poin
     return true;
 }
 
+// https://stackoverflow.com/questions/328107/how-can-you-determine-a-point-is-between-two-other-points-on-a-line-segment
+bool lw_pointOnSegment(lw_vec2 line[2], lw_vec2 point) {
+    lw_vec2 a = { line[0][0], line[0][1] };
+    lw_vec2 b = { line[1][0], line[1][1] };
+    lw_vec2 c = { point[0], point[1] };
+
+    // cross of two lines going from a to b and from a to c
+    float cross3 = (c[1] - a[1]) * (b[0] - a[0]) - (c[0] - a[0]) * (b[1] - a[1]);
+
+    // check if point is on line
+    if (fabsf(cross3) > 0.003f) return false;
+
+    // dot of two lines going from a to b and from a to c
+    float dot3 = (c[0] - a[0]) * (b[0] - a[0]) + (c[1] - a[1]) * (b[1] - a[1]);
+
+    // the max dot value will be the square distance because c == b
+    if (dot3 < 0.0f) return false;
+    if (dot3 > lw_sqrDist2d(a, b)) return false;
+
+    return true;
+}
+
 bool lw_intersectSegmentPlane(lw_vec3 line[2], lw_vec4 plane, float *o_t) {
     lw_vec3 p0 = {
         plane[0] * plane[3],
@@ -105,7 +128,51 @@ bool lw_intersectSegmentPlane(lw_vec3 line[2], lw_vec4 plane, float *o_t) {
     return true;
 }
 
-bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t) {
+bool lw_intersectRayPlane(lw_vec3 ray[2], lw_vec4 plane, float *o_t) {
+    lw_vec3 p0 = {
+        plane[0] * plane[3],
+        plane[1] * plane[3],
+        plane[2] * plane[3],
+    };
+
+    // lw_vec3 l = {
+    //     ray[1][0] - ray[0][0],
+    //     ray[1][1] - ray[0][1],
+    //     ray[1][2] - ray[0][2],
+    // };
+
+    lw_vec3 l = {
+        ray[1][0],
+        ray[1][1],
+        ray[1][2],
+    };
+
+    float denom = lw_dot3d(l, plane);
+    if (denom == 0) return false;
+    float s = signum(denom);
+
+    lw_vec3 num0 = {
+        p0[0] - ray[0][0],
+        p0[1] - ray[0][1],
+        p0[2] - ray[0][2],
+    };
+
+    float d = lw_dot3d(num0, plane);
+    d *= s;
+    denom *= s;
+
+    // no top bounds because it is ray
+    if (d < 0.0f) return false;
+
+    if (o_t != NULL) {
+        *o_t = d / denom;
+    }
+    return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t, float *o_u) {
     float x1, x2, x3, x4;
     float y1, y2, y3, y4;
     x1 = seg0[0][0];
@@ -127,11 +194,15 @@ bool lw_intersectSegmentSegment(lw_vec2 seg0[2], lw_vec2 seg1[2], float *o_t) {
     un *= s;
     denom *= s;
 
-    // t is segment, u is ray.
+    // t is seg0, u is seg1.
     if (tn < 0.0f || tn > denom || un < 0.0f || un > denom) return false;
 
     if (o_t != NULL) {
         *o_t = tn / denom;
+    }
+
+    if (o_t != NULL) {
+        *o_u = un / denom;
     }
 
     return true;
@@ -166,17 +237,18 @@ bool lw_intersectSegmentLine(lw_vec2 seg[2], lw_vec2 line[2], float *o_t) {
     return true;
 }
 
-bool lw_intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float *o_t) {
+bool lw_intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float *o_t, float *o_u) {
     float x1, x2, x3, x4;
     float y1, y2, y3, y4;
     x1 = line[0][0];
     y1 = line[0][1];
     x2 = line[1][0];
     y2 = line[1][1];
+
     x3 = ray[0][0];
     y3 = ray[0][1];
-    x4 = ray[1][0];
-    y4 = ray[1][1];
+    x4 = ray[0][0] + ray[1][0];
+    y4 = ray[0][1] + ray[1][1];
 
     float denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
     if (denom == 0) return false;
@@ -194,6 +266,10 @@ bool lw_intersectSegmentRay(lw_vec2 line[2], lw_vec2 ray[2], float *o_t) {
 
     if (o_t != NULL) {
         *o_t = tn / denom;
+    }
+
+    if (o_u != NULL) {
+        *o_u = un / denom;
     }
 
     return true;
@@ -223,14 +299,14 @@ void lw_closestPointOnSegment(lw_vec2 seg[2], lw_vec2 point, lw_vec2 o_point) {
     float d = lw_dot2d(v, v);
 
     if (d == 0) {
-        // line is exists at only a single point
+        // line exists at only a single point
         o_point[0] = seg[0][0];
         o_point[1] = seg[0][1];
         return;
     }
 
     float t = lw_dot2d(v, u) / d;
-    t = clamp(t, 0.0f, 1.0f);
+    t       = clamp(t, 0.0f, 1.0f);
 
     o_point[0] = lerp(seg[0][0], seg[1][0], t);
     o_point[1] = lerp(seg[0][1], seg[1][1], t);

@@ -1,0 +1,62 @@
+# LE
+
+Header:
+magic                   4bytes      "LWBB"
+version                 u32         
+checksum                u32         
+num_sectors             u32         
+num_subsectors          u32         
+num_walls               u32
+
+//
+//  SECTORS
+//
+
+Sector 0:
+num_subsectors          u32
+num_walls               u32
+first_subsector_offset  u32         offset into subsector table
+first_wall_offset       u32         offset into wall table
+
+...
+Sector n:
+...
+
+//
+//  SUBSECTORS
+//
+
+Subsector 0-0:
+floor_height            f32
+ceiling_height          f32
+
+Subsector 0-1:
+...
+
+...
+Subsector 0-n:
+...
+
+...
+Subsector m-n:
+...
+
+//
+//  WALLS
+//
+
+Wall 0-0:
+x                       f32
+y                       f32
+next                    u32
+portal_sector           u32
+portal_wall             u32
+
+Wall 0-1:
+...
+
+...
+Wall 0-n:
+...
+
+Wall m-n:

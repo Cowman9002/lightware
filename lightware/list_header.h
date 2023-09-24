@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stddef.h>
 
 #if !defined(LIST_TAG) || !defined(LIST_ITEM_TYPE)
 #error Missing type or tag definition
@@ -33,7 +34,10 @@ LIGHTWARE_API void LIST_METHOD(push_back)(LIST_TAG *const list, LIST_ITEM_TYPE i
 LIGHTWARE_API bool LIST_METHOD(insert)(LIST_TAG *const list, size_t location, LIST_ITEM_TYPE item);
 LIGHTWARE_API bool LIST_METHOD(pop_front)(LIST_TAG *const list, LIST_ITEM_TYPE *o_item);
 LIGHTWARE_API bool LIST_METHOD(pop_back)(LIST_TAG *const list, LIST_ITEM_TYPE *o_item);
-LIGHTWARE_API bool LIST_METHOD(remove)(LIST_TAG *const list, size_t location, LIST_ITEM_TYPE *o_item);
+LIGHTWARE_API bool LIST_METHOD(remove_at)(LIST_TAG *const list, size_t location, LIST_ITEM_TYPE *o_item);
+LIGHTWARE_API bool LIST_METHOD(remove)(LIST_TAG *const list, LIST_ITEM_TYPE *item);
+LIGHTWARE_API size_t LIST_METHOD(find_index)(LIST_TAG *const list, LIST_ITEM_TYPE *item);
+LIGHTWARE_API LIST_ITEM_TYPE *LIST_METHOD(get)(LIST_TAG *const list, size_t location);
 
 #undef LIST_TAG
 #undef LIST_ITEM_TYPE

@@ -10,10 +10,14 @@ float lw_cross2d(lw_vec2 a, lw_vec2 b) {
     return a[0] * b[1] - a[1] * b[0];
 }
 
-float lw_dist2d(lw_vec2 a, lw_vec2 b) {
+float lw_sqrDist2d(lw_vec2 a, lw_vec2 b) {
     lw_vec2 diff   = { a[0] - b[0], a[1] - b[1] };
     float sqr_dist = lw_dot2d(diff, diff);
-    return sqrtf(sqr_dist);
+    return sqr_dist;
+}
+
+float lw_dist2d(lw_vec2 a, lw_vec2 b) {
+    return sqrtf(lw_sqrDist2d(a, b));
 }
 
 float lw_normalized2d(lw_vec2 a, lw_vec2 o) {
@@ -27,9 +31,11 @@ float lw_normalized2d(lw_vec2 a, lw_vec2 o) {
 }
 
 float lw_normalize2d(lw_vec2 a) {
-    float len = sqrtf(lw_dot2d(a, a));
+    float len = lw_dot2d(a, a);
     if (len != 0) {
+        len           = sqrtf(len);
         float inv_len = 1.0f / len;
+
         for (unsigned i = 0; i < 2; ++i)
             a[i] *= inv_len;
     }

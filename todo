@@ -1,6 +1,6 @@
 TODAY:
-[ ] sector adding subtracts from existing sectors
-[ ] sector joining
+[x] sector adding subtracts from existing sectors
+[x] sector joining
 [ ] floor/ceiling decomposition into convex polygons
 [ ] s buffer for convex sectors
 

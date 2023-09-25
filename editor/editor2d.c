@@ -166,6 +166,9 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
             editor->data3d.camera.pos[2] = editor->data3d.camera.sector->subsectors[0].floor_height + CAMERA_3D_HEIGHT;
         }
 
+        // reset all last_portal_view frames
+        lw_resetPortalWorldTimers(editor->world);
+
         return LW_EXIT_OK;
     }
 
@@ -191,7 +194,7 @@ int editor2dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                 editor->data2d.new_sector.subsectors[0].ceiling_height = 3.0f;
                 editor->data2d.new_sector.subsectors[0].floor_height   = 0.0f;
 
-                editor->data2d.new_sector.walls                  = malloc(editor->data2d.new_sector_capacity * sizeof(*editor->data2d.new_sector.walls));
+                editor->data2d.new_sector.walls                  = calloc(editor->data2d.new_sector_capacity, sizeof(*editor->data2d.new_sector.walls));
                 editor->data2d.new_sector.walls[0].start[0]      = editor->data2d.mouse_snapped_pos[0];
                 editor->data2d.new_sector.walls[0].start[1]      = editor->data2d.mouse_snapped_pos[1];
                 editor->data2d.new_sector.walls[0].next          = UNDEFINED;

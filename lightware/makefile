@@ -9,7 +9,7 @@ DEFINES := -DVERSION_MAJOR=0 -DVERSION_MINOR=1 -DLIGHTWARE_EXPORT
 default: $(TARGET)
 all: default
 
-SOURCES = lodepng.c lightware.c draw.c mathlib.c geo.c portal.c collision.c fileio.c
+SOURCES = lodepng.c lightware.c draw.c mathlib.c geo.c portal.c collision.c fileio.c rand.c
 OBJECTS = $(patsubst %.c, obj/%.o, $(SOURCES))
 HEADERS = $(wildcard *.h)
 

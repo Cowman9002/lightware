@@ -133,6 +133,8 @@ int lw_start(LW_Context *const context) {
         //      UPDATE
         ////////////////////////////////////////////////
 
+        ++context->frame;
+
         function_result = context->update_fn(context, delta);
         if (function_result != 0) return function_result;
 
@@ -162,6 +164,10 @@ void *lw_getUserData(LW_Context *const context) {
 float lw_getSeconds(LW_Context *const context) {
     uint64_t t = SDL_GetTicks64();
     return (float)t / 1000.0f;
+}
+
+uint64_t lw_getFrame(LW_Context *const context) {
+    return context->frame;
 }
 
 void lw_setWindowTitle(LW_Context *const context, const char *title) {

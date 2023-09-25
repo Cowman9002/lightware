@@ -108,6 +108,7 @@ LIGHTWARE_API int lw_start(LW_Context *const context);
 
 LIGHTWARE_API void *lw_getUserData(LW_Context *const context);
 LIGHTWARE_API float lw_getSeconds(LW_Context *const context);
+LIGHTWARE_API uint64_t lw_getFrame(LW_Context *const context);
 
 LIGHTWARE_API void lw_setWindowTitle(LW_Context *const context, const char *title);
 
@@ -438,18 +439,19 @@ typedef struct LW_Subsector {
 typedef struct LW_Sector LW_Sector;
 typedef struct LW_LineDef {
     lw_vec2 start; // position
-    unsigned next;  // index to other linedef
-    unsigned prev;  // index to last linedef
+    unsigned next; // index to other linedef
+    unsigned prev; // index to last linedef
     LW_Sector *sector;
 
     lw_vec4 plane;
     LW_Sector *portal_sector;
     struct LW_LineDef *portal_wall;
+    uint64_t last_look_frame; // used to prevent recursive portaling
 } LW_LineDef;
 
 typedef struct LW_Sector {
     unsigned num_walls;
-    LW_LineDef *walls;               // list
+    LW_LineDef *walls; // list
 
     // definitions of sub sectors for sector over sector
     unsigned num_subsectors;
@@ -507,7 +509,9 @@ LIGHTWARE_API bool lw_pointInSector(LW_Sector sector, lw_vec2 point, bool count_
 LIGHTWARE_API LW_Sector *lw_getSector(LW_PortalWorld pod, lw_vec2 point);
 LIGHTWARE_API unsigned lw_getSubSector(LW_Sector *sector, lw_vec3 point);
 
-LIGHTWARE_API void lw_renderPortalWorld(LW_Framebuffer *const framebuffer, LW_PortalWorld pod, LW_Camera camera);
+LIGHTWARE_API void lw_resetPortalWorldTimers(LW_PortalWorld pod);
+
+LIGHTWARE_API void lw_renderPortalWorld(LW_Framebuffer *const framebuffer, LW_PortalWorld pod, LW_Camera camera, uint64_t frame);
 LIGHTWARE_API void lw_renderPortalWorldWireframe(LW_Framebuffer *const framebuffer, LW_PortalWorld pod, LW_Camera camera);
 
 
@@ -521,3 +525,11 @@ typedef struct LW_Aabb {
 
 LIGHTWARE_API bool lw_pointInAabb(LW_Aabb aabb, lw_vec2 point);
 LIGHTWARE_API bool lw_pointInCircle(LW_Circle circle, lw_vec2 point);
+
+
+//
+//  RANDOM
+//
+
+// updates state
+LIGHTWARE_API uint32_t lw_xorShift32(uint32_t *state);

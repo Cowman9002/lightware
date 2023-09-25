@@ -158,6 +158,11 @@ typedef struct Editor {
     struct EditorData3d data3d;
     struct EditorData2d data2d;
 
+    // fps counter
+    unsigned fps_frames;
+    float fps_counter;
+    unsigned cached_fps;
+
 } Editor;
 
 bool editorInit(Editor *const editor);

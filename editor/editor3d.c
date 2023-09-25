@@ -222,7 +222,7 @@ int editor3dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
 
     lw_fillBuffer(framebuffer, editor->c_background);
 
-    lw_renderPortalWorld(framebuffer, editor->world, editor->data3d.camera);
+    lw_renderPortalWorld(framebuffer, editor->world, editor->data3d.camera, lw_getFrame(context));
 
     // draw interact point
     if (editor->data3d.ray_hit_type != RayHitType_None) {

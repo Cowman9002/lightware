@@ -102,6 +102,16 @@ int main() {
 }
 
 int editorUpdate(Editor *const editor, float dt, LW_Context *const context) {
+    editor->fps_counter += dt;
+    ++editor->fps_frames;
+
+    if(editor->fps_counter >= 1.0f / 4.0f) {
+        editor->cached_fps = editor->fps_frames * 4;
+
+        editor->fps_frames = 0;
+        editor->fps_counter -= 1.0f / 4.0f;
+    }
+
     if (editor->project_directory[0] == 0) {
         if (s_recent_projects.hover_index >= 0 && lw_isMouseButtonDown(context, 0)) {
             if (s_recent_projects.hover_index == 0) {
@@ -315,6 +325,10 @@ int editorRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_Con
                 lw_drawString(framebuffer, (lw_ivec2){ editor->width - editor->font.char_width * strlen(editor->text_buffer) - 5, editor->height - editor->font.texture.height - 5 },
                               editor->c_font, editor->font, editor->text_buffer);
             }
+            
+            snprintf(editor->text_buffer, TEXT_BUFFER_SIZE, "%u fps %.2f ms", editor->cached_fps, 1000.0f / editor->cached_fps);
+                lw_drawString(framebuffer, (lw_ivec2){ editor->width - editor->font.char_width * strlen(editor->text_buffer) - 5, editor->height - editor->font.texture.height * 2 - 5 },
+                              editor->c_font, editor->font, editor->text_buffer);
         }
         return res;
     }

@@ -29,6 +29,7 @@ typedef struct LW_Context {
 
     // time
     float seconds;
+    uint64_t frame;
 
 } LW_Context;
 

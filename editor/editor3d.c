@@ -9,12 +9,12 @@
 static void _input(Editor *const editor, float dt, LW_Context *const context);
 
 int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
-    if (lw_isKeyDown(context, LW_KeyTab)) {
+    _input(editor, dt, context);
+
+    if (isInputActionDown(context, InputName_swapViews)) {
         editor->view_3d = false;
         return LW_EXIT_OK;
     }
-
-    _input(editor, dt, context);
 
     lw_ivec2 mouse_screen_pos;
     lw_getMousePos(context, mouse_screen_pos);
@@ -46,7 +46,7 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
     while (casting) {
         editor->data3d.intersect_dist = INFINITY;
 
-        //raycast ceiling
+        // raycast ceiling
         lw_vec4 plane;
         float dist;
 
@@ -125,7 +125,9 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
     }
     editor->data3d.intersect_dist += dist_cache;
 
-    float high_lower = !lw_isKey(context, LW_KeyLCtrl) * lw_getMouseScroll(context) + (lw_isKeyDown(context, LW_KeyQ) - lw_isKeyDown(context, LW_KeyZ));
+    // check that we are not changing snap value and then take into account the scroll
+    // then add the keyboard values
+    float high_lower = inputActionValue(context, InputName_changeHeight) + (isInputActionDown(context, InputName_incrHeight) - isInputActionDown(context, InputName_decrHeight));
 
     switch (editor->data3d.ray_hit_type) {
         case RayHitType_None: break;
@@ -135,9 +137,9 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                 subsector->ceiling_height = roundf(subsector->ceiling_height / editor->data3d.floor_snap_val) * editor->data3d.floor_snap_val;
             }
 
-            if (lw_isKeyDown(context, LW_KeyC) && lw_isKey(context, LW_KeyLCtrl)) {
+            if (isInputActionDown(context, InputName_copy)) {
                 editor->data3d.copied_height_val = subsector->ceiling_height;
-            } else if (lw_isKeyDown(context, LW_KeyV) && lw_isKey(context, LW_KeyLCtrl)) {
+            } else if (isInputActionDown(context, InputName_paste)) {
                 subsector->ceiling_height = editor->data3d.copied_height_val;
             }
 
@@ -157,9 +159,9 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
                 subsector->floor_height = roundf(subsector->floor_height / editor->data3d.floor_snap_val) * editor->data3d.floor_snap_val;
             }
 
-            if (lw_isKeyDown(context, LW_KeyC) && lw_isKey(context, LW_KeyLCtrl)) {
+            if (isInputActionDown(context, InputName_copy)) {
                 editor->data3d.copied_height_val = subsector->floor_height;
-            } else if (lw_isKeyDown(context, LW_KeyV) && lw_isKey(context, LW_KeyLCtrl)) {
+            } else if (isInputActionDown(context, InputName_paste)) {
                 subsector->floor_height = editor->data3d.copied_height_val;
             }
 
@@ -178,40 +180,38 @@ int editor3dUpdate(Editor *const editor, float dt, LW_Context *const context) {
     }
 
     if (sector != NULL && subsector != NULL) {
-        if (lw_isKeyDown(context, LW_KeyF)) {
-            if (lw_isKey(context, LW_KeyLCtrl)) {
-                // remove subsector
-                if (sector->num_subsectors > 1) {
-                    // fill in space
-                    // move subsectors down
-                    --sector->num_subsectors;
-                    for (unsigned i = ssid; i < sector->num_subsectors; ++i) {
-                        sector->subsectors[i] = sector->subsectors[i + 1];
-                    }
+        if (isInputActionDown(context, InputName_removeSubsector)) {
+            // remove subsector
+            if (sector->num_subsectors > 1) {
+                // fill in space
+                // move subsectors down
+                --sector->num_subsectors;
+                for (unsigned i = ssid; i < sector->num_subsectors; ++i) {
+                    sector->subsectors[i] = sector->subsectors[i + 1];
                 }
-
-            } else {
-                // Add subsector
-                unsigned new_ssid = ssid + 1;
-
-                // allocate memory
-                ++sector->num_subsectors;
-                sector->subsectors = realloc(sector->subsectors, sector->num_subsectors * sizeof(*sector->subsectors));
-                subsector          = &sector->subsectors[ssid];
-
-                // move subsectors up
-                for (unsigned i = sector->num_subsectors - 1; i > new_ssid; --i) {
-                    sector->subsectors[i] = sector->subsectors[i - 1];
-                }
-
-                // set values
-                float new_ceiling = (subsector->ceiling_height + subsector->floor_height) * 0.5f - 4.0f / 32.0f;
-                float new_floor   = (subsector->ceiling_height + subsector->floor_height) * 0.5f + 4.0f / 32.0f;
-
-                sector->subsectors[new_ssid].ceiling_height = subsector->ceiling_height;
-                sector->subsectors[new_ssid].floor_height   = new_floor;
-                subsector->ceiling_height                   = new_ceiling;
             }
+
+        } else if (isInputActionDown(context, InputName_addSubsector)) {
+            // Add subsector
+            unsigned new_ssid = ssid + 1;
+
+            // allocate memory
+            ++sector->num_subsectors;
+            sector->subsectors = realloc(sector->subsectors, sector->num_subsectors * sizeof(*sector->subsectors));
+            subsector          = &sector->subsectors[ssid];
+
+            // move subsectors up
+            for (unsigned i = sector->num_subsectors - 1; i > new_ssid; --i) {
+                sector->subsectors[i] = sector->subsectors[i - 1];
+            }
+
+            // set values
+            float new_ceiling = (subsector->ceiling_height + subsector->floor_height) * 0.5f - 4.0f / 32.0f;
+            float new_floor   = (subsector->ceiling_height + subsector->floor_height) * 0.5f + 4.0f / 32.0f;
+
+            sector->subsectors[new_ssid].ceiling_height = subsector->ceiling_height;
+            sector->subsectors[new_ssid].floor_height   = new_floor;
+            subsector->ceiling_height                   = new_ceiling;
         }
     }
 
@@ -303,16 +303,17 @@ int editor3dRender(Editor *const editor, LW_Framebuffer *const framebuffer, LW_C
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// TODO: Convert to input system
 static void _input(Editor *const editor, float dt, LW_Context *const context) {
-    if (!lw_isKey(context, LW_KeyLCtrl)) {
+    {
         lw_vec2 movement, movement_rot;
-        movement[0] = lw_isKey(context, LW_KeyD) - lw_isKey(context, LW_KeyA);
-        movement[1] = lw_isKey(context, LW_KeyW) - lw_isKey(context, LW_KeyS);
+        movement[0] = isInputAction(context, InputName_moveRight) - isInputAction(context, InputName_moveLeft);
+        movement[1] = isInputAction(context, InputName_moveForwards) - isInputAction(context, InputName_moveBackwards);
         lw_normalize2d(movement);
 
-        float z = lw_isKey(context, LW_KeySpace) - lw_isKey(context, LW_KeyLShift);
-        float r = lw_isKey(context, LW_KeyLeft) - lw_isKey(context, LW_KeyRight);
-        float s = lw_isKey(context, LW_KeyUp) - lw_isKey(context, LW_KeyDown);
+        float z = isInputAction(context, InputName_moveUp) - isInputAction(context, InputName_moveDown);
+        float r = isInputAction(context, InputName_rotateLeft) - isInputAction(context, InputName_rotateRight);
+        float s = isInputAction(context, InputName_rotateUp) - isInputAction(context, InputName_rotateDown);
 
         editor->data3d.camera.yaw += r * dt * 2.0f;
         editor->data3d.camera.pitch += s * dt * 1.5f;
@@ -331,11 +332,11 @@ static void _input(Editor *const editor, float dt, LW_Context *const context) {
         editor->data3d.camera.pos[2] += z * dt * 5.0f;
     }
 
-    if ((lw_isKeyDown(context, LW_KeyEquals) || (lw_isKey(context, LW_KeyLCtrl) && lw_getMouseScroll(context) > 0)) && editor->data3d.floor_snap_val < MAX_GRID) {
+    if ((isInputActionUp(context, InputName_changeGrid) || isInputActionDown(context, InputName_increaseGrid)) && editor->data3d.floor_snap_val < MAX_GRID) {
         editor->data3d.floor_snap_val *= 2;
     }
 
-    if ((lw_isKeyDown(context, LW_KeyMinus) || (lw_isKey(context, LW_KeyLCtrl) && lw_getMouseScroll(context) < 0)) && editor->data3d.floor_snap_val > MIN_GRID) {
+    if ((isInputActionDown(context, InputName_changeGrid) || isInputActionDown(context, InputName_decreaseGrid)) && editor->data3d.floor_snap_val > MIN_GRID) {
         editor->data3d.floor_snap_val /= 2;
     }
 

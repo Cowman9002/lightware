@@ -49,7 +49,7 @@ function Invoke-Make {
             return $true
         }
         Default {
-            Write-Host "Unknown item '$item' for make" -ForegroundColor Red
+            Write-Host "Unknown item '$item' for make.\nTry 'dll' or 'editor'" -ForegroundColor Red
             return $false
         }
     }
@@ -69,7 +69,7 @@ function Invoke-Run {
             return $true
         }
         Default {
-            Write-Host "Unknown item '$item' for run" -ForegroundColor Red
+            Write-Host "Unknown item '$item' for run.\nTry 'editor'" -ForegroundColor Red
             return $false
         }
     }
@@ -104,7 +104,7 @@ function Invoke-Clean {
             return $true
         }
         Default {
-            Write-Host "Unknown item '$item' for clean" -ForegroundColor Red
+            Write-Host "Unknown item '$item' for clean.\nTry 'dll' or 'editor'" -ForegroundColor Red
             return $false
         }
     }
@@ -120,6 +120,6 @@ switch ($command) {
         }
     }
     Default {
-        Write-Host "Unknown command '$command'" -ForegroundColor Red
+        Write-Host "Unknown command '$command'\nTry 'clean', 'make', or 'run'" -ForegroundColor Red
     }
 }

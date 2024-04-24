@@ -21,16 +21,23 @@
 typedef enum InputName {
     InputName_swapViews,
 
+    InputName_copy,
+    InputName_paste,
+
     InputName_moveForwards,
     InputName_moveBackwards,
     InputName_moveLeft,
     InputName_moveRight,
     InputName_rotateLeft,
     InputName_rotateRight,
+    InputName_incrZoom,
+    InputName_decrZoom,
+    InputName_changeZoom,
 
     InputName_toggleGrid,
     InputName_increaseGrid,
     InputName_decreaseGrid,
+    InputName_changeGrid,
     InputName_specterSelect,
 
     InputName_cancel,
@@ -47,6 +54,19 @@ typedef enum InputName {
     InputName_joinSectors,
     InputName_selectionBox,
 
+    // 3d only
+    InputName_rotateUp,
+    InputName_rotateDown,
+    InputName_moveUp,
+    InputName_moveDown,
+
+    InputName_incrHeight,
+    InputName_decrHeight,
+    InputName_changeHeight,
+
+    InputName_addSubsector,
+    InputName_removeSubsector,
+
     InputName_size,
 } InputName;
 
@@ -58,6 +78,7 @@ typedef struct InputAction {
     enum type {
         InputTypeKey,
         InputTypeButton,
+        InputTypeScroll,
     } type;
 
     union major {
@@ -179,3 +200,4 @@ void setInputAction(InputName action, InputAction val);
 bool isInputAction(LW_Context *const context, InputName action);
 bool isInputActionDown(LW_Context *const context, InputName action);
 bool isInputActionUp(LW_Context *const context, InputName action);
+float inputActionValue(LW_Context *const context, InputName action);

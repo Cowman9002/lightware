@@ -14,7 +14,8 @@ OBJECTS = $(patsubst %.c, obj/%.o, $(SOURCES))
 HEADERS = $(wildcard *.h)
 
 obj/%.o: %.c $(HEADERS)
-	mkdir -p $(dir obj/$<)
+#	mkdir -p $(dir obj/$<)
+	IF NOT EXIST "$(dir obj/$<)" mkdir "$(dir obj/$<)"
 	$(CC) $(DEFINES) $(CFLAGS) -c $< -o $@
 
 .PRECIOUS: $(TARGET) $(OBJECTS)

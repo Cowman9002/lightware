@@ -62,16 +62,23 @@ bool editorInit(Editor *const editor) {
 
     setInputAction(InputName_swapViews, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyTab, .disallowed_modifiers = 0, .required_modifiers = 0 });
 
+    setInputAction(InputName_copy, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyC, .disallowed_modifiers = 0, .required_modifiers = MODIFIER_CTRL });
+    setInputAction(InputName_paste, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyV, .disallowed_modifiers = 0, .required_modifiers = MODIFIER_CTRL });
+
     setInputAction(InputName_moveForwards, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyW, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_moveBackwards, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyS, .disallowed_modifiers = MODIFIER_CTRL, .required_modifiers = 0 });
     setInputAction(InputName_moveLeft, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyA, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_moveRight, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyD, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_rotateLeft, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyLeft, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_rotateRight, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyRight, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_incrZoom, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyEquals, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_decrZoom, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyMinus, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_changeZoom, (InputAction){ .type = InputTypeScroll, .disallowed_modifiers = MODIFIER_CTRL, .required_modifiers = 0 });
 
     setInputAction(InputName_toggleGrid, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyG, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_increaseGrid, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyRightBracket, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_decreaseGrid, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyLeftBracket, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_changeGrid, (InputAction){ .type = InputTypeScroll, .disallowed_modifiers = 0, .required_modifiers = MODIFIER_CTRL });
     setInputAction(InputName_specterSelect, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyP, .disallowed_modifiers = 0, .required_modifiers = 0 });
 
     setInputAction(InputName_cancel, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyEscape, .disallowed_modifiers = MODIFIER_SHIFT, .required_modifiers = 0 });
@@ -87,6 +94,19 @@ bool editorInit(Editor *const editor) {
     setInputAction(InputName_autoPortal, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyV, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_joinSectors, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyJ, .disallowed_modifiers = 0, .required_modifiers = 0 });
     setInputAction(InputName_selectionBox, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyB, .disallowed_modifiers = 0, .required_modifiers = 0 });
+
+    // 3D inputs
+    setInputAction(InputName_moveUp, (InputAction){ .type = InputTypeKey, .major.key = LW_KeySpace, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_moveDown, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyLShift, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_rotateUp, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyUp, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_rotateDown, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyDown, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    
+    setInputAction(InputName_incrHeight, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyQ, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_decrHeight, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyZ, .disallowed_modifiers = 0, .required_modifiers = 0 });
+    setInputAction(InputName_changeHeight, (InputAction){ .type = InputTypeScroll, .disallowed_modifiers = MODIFIER_CTRL, .required_modifiers = 0 });
+    
+    setInputAction(InputName_addSubsector, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyF, .disallowed_modifiers = MODIFIER_CTRL, .required_modifiers = 0 });
+    setInputAction(InputName_removeSubsector, (InputAction){ .type = InputTypeKey, .major.key = LW_KeyF, .disallowed_modifiers = 0, .required_modifiers = MODIFIER_CTRL });
 
     return true;
 }
@@ -117,6 +137,7 @@ bool isInputAction(LW_Context *const context, InputName action) {
     switch (s_actions[action].type) {
         case InputTypeKey: return lw_isKey(context, s_actions[action].major.key);
         case InputTypeButton: return lw_isMouseButton(context, s_actions[action].major.button);
+        case InputTypeScroll: return lw_getMouseScroll(context) != 0.0f; // should have epsilon, but most report at whole numbers anyway
     }
     return false;
 }
@@ -127,6 +148,7 @@ bool isInputActionDown(LW_Context *const context, InputName action) {
     switch (s_actions[action].type) {
         case InputTypeKey: return lw_isKeyDown(context, s_actions[action].major.key);
         case InputTypeButton: return lw_isMouseButtonDown(context, s_actions[action].major.button);
+        case InputTypeScroll: return lw_getMouseScroll(context) < 0.0f;
     }
     return false;
 }
@@ -137,6 +159,18 @@ bool isInputActionUp(LW_Context *const context, InputName action) {
     switch (s_actions[action].type) {
         case InputTypeKey: return lw_isKeyUp(context, s_actions[action].major.key);
         case InputTypeButton: return lw_isMouseButtonUp(context, s_actions[action].major.button);
+        case InputTypeScroll: return lw_getMouseScroll(context) > 0.0f;
     }
     return false;
+}
+
+float inputActionValue(LW_Context *const context, InputName action) {
+    if (!_modifierTest(context, action)) return false;
+
+    switch (s_actions[action].type) {
+        case InputTypeKey: return lw_isKey(context, s_actions[action].major.key) ? 1.0f : 0.0f;
+        case InputTypeButton: return lw_isMouseButton(context, s_actions[action].major.button) ? 1.0f : 0.0f;
+        case InputTypeScroll: return lw_getMouseScroll(context);
+    }
+    return 0.0f;
 }

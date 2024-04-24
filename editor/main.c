@@ -200,7 +200,7 @@ int editorUpdate(Editor *const editor, float dt, LW_Context *const context) {
             }
         }
     } else {
-        if (lw_isKeyDown(context, LW_KeyS) && (lw_isKey(context, LW_KeyLCtrl) || lw_isKey(context, LW_KeyLCtrl))) {
+        if (lw_isKeyDown(context, LW_KeyS) && (lw_isKey(context, LW_KeyLCtrl) || lw_isKey(context, LW_KeyRCtrl))) {
 
             // save as, or if no file is open
             if (lw_isKey(context, LW_KeyLShift) || lw_isKey(context, LW_KeyRShift) || editor->open_file[0] == 0) {
@@ -224,7 +224,7 @@ int editorUpdate(Editor *const editor, float dt, LW_Context *const context) {
                     doErrorPopup("Save Failure!", message);
                 }
             }
-        } else if (lw_isKeyDown(context, LW_KeyO) && (lw_isKey(context, LW_KeyLCtrl) || lw_isKey(context, LW_KeyLCtrl))) {
+        } else if (lw_isKeyDown(context, LW_KeyO) && (lw_isKey(context, LW_KeyLCtrl) || lw_isKey(context, LW_KeyRCtrl))) {
             char file_name[FILE_NAME_BUFFER_SIZE] = { 0 };
 
             if (doOpenDialog("Portal World (*.pod)\0*.pod\0\0", editor->project_directory, file_name, FILE_NAME_BUFFER_SIZE)) {

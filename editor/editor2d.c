@@ -1449,11 +1449,11 @@ static void _input(Editor *const editor, float dt, LW_Context *const context) {
     }
 
     if (editor->data2d.grid_active) {
-        if (isInputActionDown(context, InputName_increaseGrid) && editor->data2d.grid_size < MAX_GRID) {
+        if ((isInputActionUp(context, InputName_changeGrid) || isInputActionDown(context, InputName_increaseGrid)) && editor->data2d.grid_size < MAX_GRID) {
             editor->data2d.grid_size *= 2;
         }
 
-        if (isInputActionDown(context, InputName_decreaseGrid) && editor->data2d.grid_size > MIN_GRID) {
+        if ((isInputActionDown(context, InputName_changeGrid) || isInputActionDown(context, InputName_decreaseGrid)) && editor->data2d.grid_size > MIN_GRID) {
             editor->data2d.grid_size /= 2;
         }
     }
@@ -1489,7 +1489,7 @@ static void _input(Editor *const editor, float dt, LW_Context *const context) {
     editor->data2d.cam_pos[0] += movement_rot[0] * dt * editor->data2d.zoom * 100.0f * 3.0f;
     editor->data2d.cam_pos[1] += movement_rot[1] * dt * editor->data2d.zoom * 100.0f * 3.0f;
 
-    float z = lw_getMouseScroll(context);
+    float z = inputActionValue(context, InputName_changeZoom) + (isInputActionDown(context, InputName_incrZoom) - isInputActionDown(context, InputName_decrZoom));
     if (z != 0.0f) {
         editor->data2d.zoom_t = clamp(editor->data2d.zoom_t + (z * 2.0f * dt), 0.0f, 1.0f);
         editor->data2d.zoom   = logerp(MIN_ZOOM, MAX_ZOOM, editor->data2d.zoom_t);
